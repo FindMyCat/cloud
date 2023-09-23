@@ -3,6 +3,7 @@ version: '3'
 services:
   emqx1:
     image: emqx/emqx:v4.0.0
+    mem_limit: 2g
     environment:
     - "EMQX_NAME=emqx"
     - "EMQX_HOST=node1.emqx.io"
@@ -13,7 +14,12 @@ services:
     - "EMQX_LOADED_PLUGINS=emqx_management,emqx_auth_username,emqx_recon,emqx_retainer,emqx_dashboard,emqx_sn"
     volumes:
         - ./tmp/emqx.lic:/opt/emqx/etc/emqx.lic
+        # MQTT-SN configuration mount
         - ./emqx_conf/emqx_sn.conf:/opt/emqx/etc/plugins/emqx_sn.conf
+        # persist these to keep data across container restarts
+        - emqx_data:/opt/emqx/data
+        - emqx_etc:/opt/emqx/etc
+        - emqx_log:/opt/emqx/log
     healthcheck:
       test: ["CMD", "/opt/emqx/bin/emqx_ctl", "status"]
       interval: 5s
@@ -26,7 +32,13 @@ services:
     ports:
       - "18083:18083"
       - "1885:1885/udp"
+      - "1883:1883"
 
 networks:
   emqx-bridge:
     driver: bridge
+
+volumes:
+  emqx_data:
+  emqx_etc:
+  emqx_log:
