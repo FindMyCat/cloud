@@ -1,0 +1,32 @@
+version: '3'
+
+services:
+  emqx1:
+    image: emqx/emqx:v4.0.0
+    environment:
+    - "EMQX_NAME=emqx"
+    - "EMQX_HOST=node1.emqx.io"
+    - "EMQX_CLUSTER__DISCOVERY=static"
+    - "EMQX_CLUSTER__STATIC__SEEDS=emqx@node1.emqx.io, emqx@node2.emqx.io"
+    - "EMQX_ZONE__EXTERNAL__RETRY_INTERVAL=2s"
+    - "EMQX_MQTT__MAX_TOPIC_ALIAS=10"
+    - "EMQX_LOADED_PLUGINS=emqx_management,emqx_auth_username,emqx_recon,emqx_retainer,emqx_dashboard,emqx_sn"
+    volumes:
+        - ./tmp/emqx.lic:/opt/emqx/etc/emqx.lic
+        - ./emqx_conf/emqx_sn.conf:/opt/emqx/etc/plugins/emqx_sn.conf
+    healthcheck:
+      test: ["CMD", "/opt/emqx/bin/emqx_ctl", "status"]
+      interval: 5s
+      timeout: 25s
+      retries: 5
+    networks:
+      emqx-bridge:
+        aliases:
+        - node1.emqx.io
+    ports:
+      - "18083:18083"
+      - "1885:1885/udp"
+
+networks:
+  emqx-bridge:
+    driver: bridge
