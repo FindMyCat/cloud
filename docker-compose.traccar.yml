@@ -1,0 +1,15 @@
+version: '3'
+
+services:
+  traccar:
+    container_name: traccar
+    hostname: traccar
+    image: traccar/traccar:latest
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+      - "5000-5150:5000-5150"
+      - "5000-5150:5000-5150/udp"
+    volumes:
+      - "/opt/traccar/logs:/opt/traccar/logs"
+      - "/opt/traccar/traccar.xml:/opt/traccar/conf/traccar.xml:ro"
