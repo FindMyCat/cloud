@@ -2,16 +2,13 @@ version: '3'
 
 services:
   emqx1:
-    image: emqx/emqx:v4.0.0
+    image: emqx/emqx:4.4.16
     mem_limit: 2g
     environment:
     - "EMQX_NAME=emqx"
     - "EMQX_HOST=node1.emqx.io"
-    - "EMQX_CLUSTER__DISCOVERY=static"
-    - "EMQX_CLUSTER__STATIC__SEEDS=emqx@node1.emqx.io, emqx@node2.emqx.io"
-    - "EMQX_ZONE__EXTERNAL__RETRY_INTERVAL=2s"
     - "EMQX_MQTT__MAX_TOPIC_ALIAS=10"
-    - "EMQX_LOADED_PLUGINS=emqx_management,emqx_auth_username,emqx_recon,emqx_retainer,emqx_dashboard,emqx_sn"
+    - "EMQX_LOADED_PLUGINS=emqx_management,emqx_auth_username,emqx_recon,emqx_retainer,emqx_dashboard,emqx_sn,emqx_rule_engine"
     volumes:
         - ./tmp/emqx.lic:/opt/emqx/etc/emqx.lic
         # MQTT-SN configuration mount

@@ -14,3 +14,10 @@ services:
       - "/opt/traccar/logs:/opt/traccar/logs"
       - "./traccar.xml:/opt/traccar/conf/traccar.xml:ro"
       - "/var/docker/traccar/data:/opt/traccar/data:rw"
+    networks:
+      emqx-bridge:
+        aliases:
+        - traccar.io
+networks:
+  emqx-bridge:
+    driver: bridge
