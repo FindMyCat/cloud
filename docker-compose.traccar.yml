@@ -17,7 +17,7 @@ services:
     networks:
       emqx-bridge:
         aliases:
-        - traccar.io
+        - traccar.instance
 networks:
   emqx-bridge:
     driver: bridge
