@@ -1,4 +1,3 @@
-version: '3'
 
 services:
   traccar:
@@ -8,8 +7,9 @@ services:
     restart: unless-stopped
     ports:
       - "8082:8082"
-      - "5000-5150:5000-5150"
-      - "5000-5150:5000-5150/udp"
+      - "5055:5055"
+    environment:
+      - "JAVA_OPTS=-Xmx128m"
     volumes:
       - "/opt/traccar/logs:/opt/traccar/logs"
       - "./traccar.xml:/opt/traccar/conf/traccar.xml:ro"
