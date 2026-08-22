@@ -4,6 +4,7 @@
     ./findmycat.py start [--emqx-password ...]
     ./findmycat.py setup --mqtt-topic ... --traccar-email ... --traccar-password ...
     ./findmycat.py destroy [--yes]
+    ./findmycat.py hologram-ping send --device-id ... [--at 300,900,1800]
 
 Each command is also runnable directly as start.py, setup.py or destroy.py;
 this is just a single entry point. Arguments after the command are passed
@@ -44,6 +45,8 @@ COMMANDS = {
     "start": ("start.py", "Starts the FindMyCat Cloud Stack"),
     "setup": ("setup.py", "Setup the pre-requisities for FindMyCat Cloud."),
     "verify": ("verify.py", "Publish a test position and check the pipeline."),
+    "hologram-ping": ("hologram-ping.py",
+                      "Send a command to a collar using the Hologram API."),
     "destroy": (
         "destroy.py",
         "Tear down the FindMyCat Cloud Stack. This is non-reversible.",
@@ -60,7 +63,7 @@ def banner():
 def usage(exit_code):
     print(f"\n{head('commands')}")
     for name, (_, description) in COMMANDS.items():
-        print(f"  {name:<9} {description}")
+        print(f"  {name:<14} {description}")
     print(f"\n{dim('Run a command with --help for its own options.')}")
     sys.exit(exit_code)
 
