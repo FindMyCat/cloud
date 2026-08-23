@@ -9,11 +9,17 @@ import os
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 
 TRACCAR = "http://localhost:8082"
 EMQX = "http://localhost:8081/api/v4"
-EMQX_AUTH = ("admin", "public")
+EMQX_DASHBOARD = "http://localhost:18083/api/v4"
+EMQX_DEFAULT_AUTH = ("admin", "public")
+# The management API on 8081 authenticates with an application id/secret, not
+# with the dashboard login. $EMQX_APP_SECRET covers the case where it was
+# rotated with `emqx_ctl mgmt update`.
+EMQX_AUTH = ("admin", os.environ.get("EMQX_APP_SECRET", "public"))
 EMQX_CONTAINER = "cloud-emqx1-1"
 TAG = "FindMyCat"
 
@@ -25,6 +31,34 @@ PROXY_COMPOSE_FILE = "docker-compose.ngnix-proxy.yml"
 
 COLOR = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
 SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+
+def emqx_status(auth=None):
+    """Probe the EMQX management API: 'ok', 'auth' (rejected), or 'down'."""
+    try:
+        request(f"{EMQX}/brokers", auth=auth or EMQX_AUTH, timeout=5)
+        return "ok"
+    except urllib.error.HTTPError as exc:
+        return "auth" if exc.code in (401, 403) else "down"
+    except Exception:
+        return "down"
+
+
+def emqx_dashboard_password_is_default():
+    """True if admin/public still opens the EMQX dashboard, False if rejected.
+
+    None when the dashboard cannot be reached, so callers can stay quiet rather
+    than claim the password is safe. The dashboard user and the management API
+    app secret are separate stores in EMQX 4.x: `emqx_ctl admins passwd` moves
+    only this one, which is why the check has to hit 18083 and not 8081.
+    """
+    try:
+        request(f"{EMQX_DASHBOARD}/brokers", auth=EMQX_DEFAULT_AUTH, timeout=5)
+        return True
+    except urllib.error.HTTPError as exc:
+        return False if exc.code in (401, 403) else None
+    except Exception:
+        return None
 
 
 def paint(text, code):
@@ -76,8 +110,15 @@ def request(url, method="GET", body=None, auth=None, form=False, timeout=20):
     return json.loads(text) if text.strip().startswith(("{", "[")) else text
 
 
-def wait_for(label, url, auth=None, seconds=180, poll=3.0):
-    """Poll until the service answers, spinning between attempts on a tty."""
+def wait_for(label, url=None, auth=None, seconds=180, poll=3.0, check=None):
+    """Poll until the service answers, spinning between attempts on a tty.
+
+    `check` replaces the plain GET for services that need a richer test; it
+    should raise to keep the loop waiting.
+    """
+    if check is None:
+        def check():
+            request(url, auth=auth)
     tty = sys.stdout.isatty()
     started = time.time()
     deadline = started + seconds
@@ -90,7 +131,7 @@ def wait_for(label, url, auth=None, seconds=180, poll=3.0):
     while time.time() < deadline:
         if time.time() >= next_poll:
             try:
-                request(url, auth=auth)
+                check()
                 took = dim(f"({time.time() - started:.0f}s)")
                 line = f"  {label:<9} {ok('up')} {took}"
                 print(f"\r\033[K{line}" if tty else f"{ok('up')} {took}")

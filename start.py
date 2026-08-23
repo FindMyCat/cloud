@@ -22,6 +22,8 @@ from utils import (
     containers,
     default_host,
     dim,
+    emqx_dashboard_password_is_default,
+    emqx_status,
     head,
     ok,
     request,
@@ -54,9 +56,9 @@ def totals(metrics, *keys):
     return {key: sum(m.get(key, 0) for m in metrics or []) for key in keys}
 
 
-def rule_engine_report(steps, indent="      "):
+def rule_engine_report(steps, auth, indent="      "):
     try:
-        rules = request(f"{EMQX}/rules", auth=EMQX_AUTH)["data"]
+        rules = request(f"{EMQX}/rules", auth=auth)["data"]
     except Exception as exc:
         print(f"{indent}{bad('unreachable')} ({exc})")
         return
@@ -91,9 +93,7 @@ def rule_engine_report(steps, indent="      "):
             target = resource_id
             if resource_id:
                 try:
-                    resource = request(
-                        f"{EMQX}/resources/{resource_id}", auth=EMQX_AUTH
-                    )
+                    resource = request(f"{EMQX}/resources/{resource_id}", auth=auth)
                     target = resource["data"]["config"].get("url", resource_id)
                 except Exception:
                     pass
@@ -122,9 +122,19 @@ def main():
 
     print(head("Starting Services"))
     traccar_ok = wait_for("traccar", f"{TRACCAR}/api/server")
-    emqx_ok = wait_for("emqx", f"{EMQX}/brokers", auth=EMQX_AUTH)
 
-    if emqx_ok and args.emqx_password:
+    state = {}
+
+    def emqx_check():
+        """Up means EMQX answered, even if it rejected our credentials."""
+        state["value"] = emqx_status(EMQX_AUTH)
+        if state["value"] == "down":
+            raise RuntimeError("no response")
+
+    emqx_up = wait_for("emqx", check=emqx_check)
+    emqx_ok = emqx_up and state.get("value") == "ok"
+
+    if emqx_up and args.emqx_password:
         set_emqx_password(args.emqx_password)
 
     print(f"\n{head('containers')}")
@@ -146,16 +156,26 @@ def main():
     print(f"    mqtt-sn   {value(f'udp://{args.host}:1885')}")
     print(f"    mqtt      {dim(f'tcp://{args.host}:1883')}")
     if emqx_ok:
-        if args.emqx_password:
-            print(f"    dashboard {ok('password set')}")
-        else:
+        default = emqx_dashboard_password_is_default()
+        if default is None:
+            print(f"    dashboard {warn('unknown')} {dim('(18083 did not answer)')}")
+        elif default:
             print(f"    dashboard {warn('default admin/public')}")
             steps.append(
                 "Replace the default EMQX dashboard login:\n"
                 "       ./start.py --emqx-password 'something-long'"
             )
+        else:
+            pass
         print("    rule engine")
-        rule_engine_report(steps)
+        rule_engine_report(steps, EMQX_AUTH)
+    elif emqx_up:
+        print(f"    api       {bad('credentials rejected')}")
+        steps.append(
+            "EMQX rejected the management API secret on 8081. Check it with\n"
+            "       docker exec %s ./bin/emqx_ctl mgmt list\n"
+            "       then export EMQX_APP_SECRET=..." % EMQX_CONTAINER
+        )
     else:
         print(f"    {bad('not responding')}")
 
