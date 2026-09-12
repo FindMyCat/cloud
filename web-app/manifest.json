@@ -1,0 +1,30 @@
+{
+  "name": "FindMyCat",
+  "short_name": "FindMyCat",
+  "description": "Track your cat's GPS location from any browser",
+  "start_url": "/cat/",
+  "scope": "/cat/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#111118",
+  "theme_color": "#111118",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

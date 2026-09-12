@@ -23,4 +23,6 @@
     <entry key='database.user'>sa</entry>
     <entry key='database.password'></entry>
 
+    <entry key='server.sessionTimeout'>604800</entry>
+
 </properties>
