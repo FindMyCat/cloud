@@ -1,0 +1,17 @@
+services:
+  wifi-locator:
+    container_name: wifi-locator
+    image: python:3.12-slim
+    restart: unless-stopped
+    command: ["python3", "/app/wifi-locator.py"]
+    # GOOGLE_GEOLOCATION_API_KEY lives here, beside the Hologram keys.
+    env_file: .env
+    volumes:
+      - "./wifi-locator.py:/app/wifi-locator.py:ro"
+    networks:
+      emqx-bridge:
+        aliases:
+        - wifi-locator.instance
+networks:
+  emqx-bridge:
+    driver: bridge

@@ -26,8 +26,12 @@ TAG = "FindMyCat"
 COMPOSE_FILES = [
     "docker-compose.traccar.yml",
     "docker-compose.emqx.yml",
+    "docker-compose.ngnix-proxy.yml",
+    "docker-compose.wifi-locator.yml",
+    "docker-compose.postgres.yml",
+    "docker-compose.device-status.yml",
 ]
-PROXY_COMPOSE_FILE = "docker-compose.ngnix-proxy.yml"
+PROXY = "http://localhost:81"
 
 COLOR = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
 SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
@@ -90,10 +94,13 @@ def dim(text):
     return paint(text, "2")
 
 
-def request(url, method="GET", body=None, auth=None, form=False, timeout=20):
+def request(url, method="GET", body=None, auth=None, form=False, timeout=20,
+            token=None):
     """Call a JSON API. Returns parsed JSON, or raw text if not JSON."""
     data = None
     headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     if body is not None:
         if form:
             data = body.encode()

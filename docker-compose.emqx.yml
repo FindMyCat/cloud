@@ -7,11 +7,16 @@ services:
     - "EMQX_NAME=emqx"
     - "EMQX_HOST=node1.emqx.io"
     - "EMQX_MQTT__MAX_TOPIC_ALIAS=10"
+    # setup-mqtt-tls.py writes the pair these point at.
+    - "EMQX_LISTENER__SSL__EXTERNAL__KEYFILE=/opt/emqx/etc/fmc_certs/broker-key.pem"
+    - "EMQX_LISTENER__SSL__EXTERNAL__CERTFILE=/opt/emqx/etc/fmc_certs/broker-cert.pem"
+    - "EMQX_LISTENER__SSL__EXTERNAL__CACERTFILE=/opt/emqx/etc/fmc_certs/broker-cert.pem"
     - "EMQX_LOADED_PLUGINS=emqx_management,emqx_auth_username,emqx_recon,emqx_retainer,emqx_dashboard,emqx_sn,emqx_rule_engine"
     volumes:
         - ./tmp/emqx.lic:/opt/emqx/etc/emqx.lic
         # MQTT-SN configuration mount
         - ./emqx_conf/emqx_sn.conf:/opt/emqx/etc/plugins/emqx_sn.conf
+        - ./emqx_certs:/opt/emqx/etc/fmc_certs:ro
         # persist these to keep data across container restarts
         - emqx_data:/opt/emqx/data
         - emqx_etc:/opt/emqx/etc
@@ -29,6 +34,7 @@ services:
       - "18083:18083"
       - "1885:1885/udp"
       - "1883:1883"
+      - "8883:8883"
       - "127.0.0.1:8081:8081"
 
 networks:

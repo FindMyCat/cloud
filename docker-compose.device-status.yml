@@ -1,0 +1,17 @@
+services:
+  device-status:
+    container_name: device-status
+    image: python:3.12-slim
+    restart: unless-stopped
+    command: ["sh", "-c", "pip install --quiet --no-cache-dir 'psycopg[binary]==3.2.*' && exec python3 /app/device-status.py"]
+    environment:
+      - "DATABASE_URL=postgresql://findmycat:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres.instance:5432/findmycat"
+    volumes:
+      - "./device-status.py:/app/device-status.py:ro"
+    networks:
+      emqx-bridge:
+        aliases:
+        - device-status.instance
+networks:
+  emqx-bridge:
+    driver: bridge

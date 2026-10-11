@@ -7,14 +7,18 @@
 """
 
 import argparse
+import glob
+import os
 import subprocess
 import sys
+BROKER_CERT = "emqx_certs/broker-cert.pem"
 
 from utils import (
     COMPOSE_FILES,
     EMQX,
     EMQX_AUTH,
     EMQX_CONTAINER,
+    PROXY,
     TAG,
     TRACCAR,
     bad,
@@ -51,6 +55,21 @@ def set_emqx_password(password):
     )
 
 
+def published_domains():
+    """Domains Nginx Proxy Manager currently serves.
+
+    Listing them over the API needs a dashboard login, but the generated nginx
+    config lands in the bind mount, so the filesystem answers without one.
+    """
+    names = []
+    for path in glob.glob("data/nginx/proxy_host/*.conf"):
+        with open(path) as handle:
+            for line in handle:
+                if line.strip().startswith("server_name"):
+                    names += line.split()[1:]
+    return sorted({name.rstrip(";") for name in names})
+
+
 def totals(metrics, *keys):
     """Sum a metric across EMQX nodes."""
     return {key: sum(m.get(key, 0) for m in metrics or []) for key in keys}
@@ -68,7 +87,7 @@ def rule_engine_report(steps, auth, indent="      "):
         print(f"{indent}{warn('not configured')}")
         steps.append(
             "Configure the EMQX rule engine:\n"
-            "       ./setup.py --mqtt-topic '/your-topic' \\\n"
+            "       ./setup.py --location-topic '/your-topic' \\\n"
             "         --traccar-email ... --traccar-password ... \\\n"
             "         --device-id ..."
         )
@@ -122,6 +141,7 @@ def main():
 
     print(head("Starting Services"))
     traccar_ok = wait_for("traccar", f"{TRACCAR}/api/server")
+    proxy_ok = wait_for("proxy", PROXY, seconds=60)
 
     state = {}
 
@@ -143,10 +163,30 @@ def main():
 
     steps = []
 
-    print(f"\n{head('traccar')}   {value(f'http://{args.host}:8082')}")
+    domains = published_domains()
+
+    print(f"\n{head('proxy')}     {value(f'http://{args.host}:81')}")
+    if proxy_ok:
+        for domain in domains:
+            print(f"    published {value('https://' + domain)}")
+        if not domains:
+            print(f"    {warn('nothing published yet')}")
+            steps.append(
+                "Publish the API over TLS on your own domain:\n"
+                "       ./findmycat.py setup --domain your.domain"
+            )
+    else:
+        print(f"    {bad('not responding')}")
+
+    print(f"\n{head('traccar')}   ", end="")
+    if domains:
+        print(value(f"https://{domains[0]}"))
+    else:
+        print(dim("reachable once you publish it above"))
     if traccar_ok:
+        where = f"https://{domains[0]}" if domains else "that domain"
         steps.append(
-            f"Register the first Traccar account at http://{args.host}:8082\n"
+            f"Register the first Traccar account at {where}\n"
             "       (skip if you already have one; it becomes the administrator)"
         )
     else:
@@ -155,6 +195,14 @@ def main():
     print(f"\n{head('emqx')}      {value(f'http://{args.host}:18083')}")
     print(f"    mqtt-sn   {value(f'udp://{args.host}:1885')}")
     print(f"    mqtt      {dim(f'tcp://{args.host}:1883')}")
+    if os.path.exists(BROKER_CERT):
+        print(f"    mqtt+tls  {value(f'ssl://{args.host}:8883')}")
+    else:
+        print(f"    mqtt+tls  {warn('no certificate')}")
+        steps.append(
+            "Give the devices a TLS listener they can verify:\n"
+            f"       ./setup-mqtt-tls.py --domain {args.host}"
+        )
     if emqx_ok:
         default = emqx_dashboard_password_is_default()
         if default is None:

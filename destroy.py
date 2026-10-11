@@ -10,7 +10,7 @@ import argparse
 import os
 import shutil
 
-from utils import COMPOSE_FILES, PROXY_COMPOSE_FILE, compose, head, warn
+from utils import COMPOSE_FILES, compose, head, warn
 
 PATHS = [
     "/var/docker/traccar/data",
@@ -37,11 +37,10 @@ def main():
         print(warn("DRY RUN, nothing will be removed. Pass --yes to proceed.\n"))
 
     print(head("containers and volumes"))
-    files = COMPOSE_FILES + [PROXY_COMPOSE_FILE]
     if dry_run:
         print("  would run docker compose down -v")
     else:
-        compose(files, "down", "-v", check=False, quiet=True)
+        compose(COMPOSE_FILES, "down", "-v", check=False, quiet=True)
         print("  removed")
 
     print(f"\n{head('data')}")

@@ -6,7 +6,7 @@ services:
     image: traccar/traccar:latest
     restart: unless-stopped
     ports:
-      - "8082:8082"
+      - "127.0.0.1:8082:8082"
       - "5055:5055"
     environment:
       - "JAVA_OPTS=-Xmx128m"

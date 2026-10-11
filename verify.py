@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Publish a test position and report how far through the pipeline it got.
 
-./verify.py --mqtt-topic '/your-topic' --device-id your-device-id
+./verify.py --location-topic '/your-topic' --device-id your-device-id
 """
 
 import argparse
@@ -16,8 +16,8 @@ MQTT_SN_PUB = "/opt/mqtt-sn-tools/mqtt-sn-pub"
 SAMPLE = '{"msg":"0.0,0.0,8,21,85"}'
 
 
-def counters(auth):
-    """Rule and action totals for the FindMyCat rule, summed across nodes."""
+def counters(auth, topic):
+    """Rule and action totals for the FindMyCat rule on topic, across nodes."""
     try:
         rules = request(f"{EMQX}/rules", auth=auth)["data"]
     except Exception as exc:
@@ -25,6 +25,10 @@ def counters(auth):
 
     for rule in rules:
         if TAG not in (rule.get("description") or ""):
+            continue
+        # Several FindMyCat rules exist, one per topic, so the counters have to
+        # come from the one this publish actually feeds.
+        if f'"{topic}"' not in (rule.get("rawsql") or ""):
             continue
         totals = {}
         for key in ("matched", "passed"):
@@ -37,12 +41,14 @@ def counters(auth):
             )
         return totals
 
-    sys.exit("no FindMyCat rule found, run ./findmycat.py setup first")
+    sys.exit(
+        f"no FindMyCat rule found on {topic}, run ./findmycat.py setup first"
+    )
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mqtt-topic", required=True)
+    parser.add_argument("--location-topic", required=True)
     parser.add_argument(
         "--device-id",
         required=True,
@@ -64,11 +70,11 @@ def main():
         sys.exit(f"{MQTT_SN_PUB} not found, run ./findmycat.py setup first")
 
     auth = (args.emqx_app_id, args.emqx_app_secret)
-    before = counters(auth)
+    before = counters(auth, args.location_topic)
 
     print(head("publish"))
     print(f"  {'broker':<9} udp://{args.host}:{args.port}")
-    print(f"  {'topic':<9} {args.mqtt_topic}")
+    print(f"  {'topic':<9} {args.location_topic}")
     print(f"  {'client id':<9} {args.device_id}")
 
     result = subprocess.run(
@@ -81,7 +87,7 @@ def main():
             "-i",
             args.device_id,
             "-t",
-            args.mqtt_topic,
+            args.location_topic,
             "-m",
             SAMPLE,
         ],
@@ -94,7 +100,7 @@ def main():
     print(f"  {'sent':<9} {ok(SAMPLE)}")
 
     time.sleep(args.wait)
-    after = counters(auth)
+    after = counters(auth, args.location_topic)
     delta = {key: after[key] - before[key] for key in before}
 
     print(f"\n{head('pipeline')}")

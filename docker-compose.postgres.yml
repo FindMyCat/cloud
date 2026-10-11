@@ -1,0 +1,19 @@
+services:
+  postgres:
+    container_name: postgres
+    image: postgres:16-alpine
+    restart: unless-stopped
+    # POSTGRES_PASSWORD lives in .env beside the Hologram keys.
+    environment:
+      - "POSTGRES_USER=findmycat"
+      - "POSTGRES_DB=findmycat"
+      - "POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}"
+    volumes:
+      - "/var/docker/postgres/data:/var/lib/postgresql/data:rw"
+    networks:
+      emqx-bridge:
+        aliases:
+        - postgres.instance
+networks:
+  emqx-bridge:
+    driver: bridge
