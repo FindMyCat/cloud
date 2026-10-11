@@ -8,6 +8,7 @@ services:
       - "DATABASE_URL=postgresql://findmycat:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres.instance:5432/findmycat"
     volumes:
       - "./device-status.py:/app/device-status.py:ro"
+      - "./traccar_access.py:/app/traccar_access.py:ro"
     networks:
       emqx-bridge:
         aliases:

@@ -42,6 +42,7 @@ API_FORWARD_PORT = 8082
 # app service worker passes them to the network instead of serving its page.
 LOCATIONS = [
     {"path": "/api/device-status", "forward_host": "device-status.instance", "forward_port": 8091},
+    {"path": "/api/device-commands", "forward_host": "device-commands.instance", "forward_port": 8093},
 ]
 
 DEFAULT_IDENTITY = "admin@example.com"

@@ -30,6 +30,7 @@ COMPOSE_FILES = [
     "docker-compose.wifi-locator.yml",
     "docker-compose.postgres.yml",
     "docker-compose.device-status.yml",
+    "docker-compose.device-commands.yml",
 ]
 PROXY = "http://localhost:81"
 

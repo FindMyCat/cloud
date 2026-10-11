@@ -1,0 +1,18 @@
+services:
+  device-commands:
+    container_name: device-commands
+    image: python:3.12-slim
+    restart: unless-stopped
+    command: ["python3", "/app/device-commands.py"]
+    # HOLOGRAM_API_KEY and HOLOGRAM_ORG_ID live here.
+    env_file: .env
+    volumes:
+      - "./device-commands.py:/app/device-commands.py:ro"
+      - "./traccar_access.py:/app/traccar_access.py:ro"
+    networks:
+      emqx-bridge:
+        aliases:
+        - device-commands.instance
+networks:
+  emqx-bridge:
+    driver: bridge

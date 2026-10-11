@@ -31,8 +31,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 import psycopg
 from psycopg.types.json import Jsonb
 
+from traccar_access import traccar_unique_id
+
 DATABASE_URL = os.environ.get("DATABASE_URL")
-TRACCAR_URL = os.environ.get("TRACCAR_URL", "http://traccar.instance:8082")
 INGEST_PORT = int(os.environ.get("DEVICE_STATUS_INGEST_PORT", "8092"))
 API_PORT = int(os.environ.get("DEVICE_STATUS_API_PORT", "8091"))
 
@@ -80,31 +81,6 @@ def create_schema():
             print(f"waiting for postgres: {exc}", flush=True)
             time.sleep(2)
     sys.exit("postgres never came up")
-
-
-def traccar_unique_id(device_id, headers):
-    """The device's uniqueId if this session may see it, else None.
-
-    The app's own Cookie (or Basic auth) is replayed against Traccar, so the
-    answer follows Traccar's permissions exactly.
-    """
-    forward = {name: headers[name] for name in ("Cookie", "Authorization") if headers.get(name)}
-    if not forward:
-        return None
-
-    req = urllib.request.Request(
-        f"{TRACCAR_URL}/api/devices?{urllib.parse.urlencode({'id': device_id})}",
-        headers=forward,
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            devices = json.loads(resp.read())
-    except urllib.error.HTTPError as exc:
-        if exc.code in (400, 401, 403, 404):
-            return None
-        raise
-
-    return devices[0]["uniqueId"] if devices else None
 
 
 class IngestHandler(BaseHTTPRequestHandler):
