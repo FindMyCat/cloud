@@ -96,11 +96,11 @@ def failure_reason(exc):
     return str(exc)
 
 
-def report_ping_failure(device_id, reason):
-    """Logged as a command event, the same as a failure the collar reports."""
+def report_ping(device_id, status, **fields):
+    """The ping's outcome as a command event: "ok" once placed, else "fail"."""
     body = {
         "id": device_id,
-        "payload": {"kind": "command", "command": "ping", "status": "fail", "reason": reason},
+        "payload": {"kind": "command", "command": "ping", "status": status, "method": "wifi", **fields},
     }
     req = urllib.request.Request(
         DEVICE_STATUS_INGEST_URL,
@@ -112,7 +112,7 @@ def report_ping_failure(device_id, reason):
         with urllib.request.urlopen(req, timeout=5):
             pass
     except urllib.error.URLError as exc:
-        print(f"{device_id}: failure not recorded: {exc}", flush=True)
+        print(f"{device_id}: ping {status} not recorded: {exc}", flush=True)
 
 
 class ScanHandler(BaseHTTPRequestHandler):
@@ -134,7 +134,7 @@ class ScanHandler(BaseHTTPRequestHandler):
             post_to_traccar(device_id, lat, lon, accuracy, battery)
         except (ValueError, KeyError, urllib.error.URLError) as exc:
             print(f"{device_id}: scan dropped: {exc}", flush=True)
-            report_ping_failure(device_id, failure_reason(exc))
+            report_ping(device_id, "fail", reason=failure_reason(exc))
             self.send_response(422)
             self.end_headers()
             return
@@ -144,6 +144,7 @@ class ScanHandler(BaseHTTPRequestHandler):
             f"+/-{accuracy:.0f} m, battery {battery}",
             flush=True,
         )
+        report_ping(device_id, "ok", access_points=len(access_points), accuracy_m=round(accuracy))
         self.send_response(204)
         self.end_headers()
 
