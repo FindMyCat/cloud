@@ -2,12 +2,17 @@
 """Send the app's commands to a collar.
 
   POST /devices/<id> {"command": "ping"}
+  GET  /firmware/<file>                     signed update image, for the collar
 
 The app calls this through the proxy, signed in with its Traccar session;
 Traccar decides which devices that session may act on. The command goes out
 through the Hologram API, whose key stays here rather than in the app, to the
 collar's UDP listener. Each one is logged with device-status as a "command"
 event: status "sent" with Hologram's message id, or "fail" if it never left.
+
+The "update" command makes the collar download /firmware/app_update.bin. The
+image is public: it is signed, MCUboot rejects anything else, and it holds no
+keys.
 
 Needs HOLOGRAM_API_KEY and HOLOGRAM_ORG_ID.
 """
@@ -35,10 +40,14 @@ HOLOGRAM_ORG_ID = os.environ.get("HOLOGRAM_ORG_ID")
 
 # The collar's UDP listener (UdpListener.c) and what dispatchCommand() accepts.
 COLLAR_UDP_PORT = "12345"
-COMMANDS = {"ping", "ping-wifi", "ping-gps", "spoof-ping", "lost", "active", "idle"}
+COMMANDS = {"ping", "ping-wifi", "ping-gps", "spoof-ping", "lost", "active", "idle", "update"}
+
+FIRMWARE_DIR = os.environ.get("FIRMWARE_DIR", "/app/firmware")
 
 # The proxy may or may not strip its location prefix, so accept both.
 DEVICE_PATH = re.compile(r"^(?:/api/device-commands)?/devices/(\d+)$")
+FIRMWARE_PATH = re.compile(r"^(?:/api/device-commands)?/firmware/([A-Za-z0-9_.-]+)$")
+RANGE = re.compile(r"^bytes=(\d+)-(\d*)$")
 
 
 def hologram(path, body=None, query=None):
@@ -92,6 +101,41 @@ def log_command(unique_id, payload):
 
 
 class CommandHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        """Serves the update image, honouring a byte range so the collar's
+        downloader can resume after a dropped connection."""
+        match = FIRMWARE_PATH.match(urllib.parse.urlparse(self.path).path)
+        path = match and os.path.join(FIRMWARE_DIR, match.group(1))
+        if not path or not os.path.isfile(path):
+            self.reply(404, {"error": "not found"})
+            return
+
+        size = os.path.getsize(path)
+        start, end = 0, size - 1
+        ranged = RANGE.match(self.headers.get("Range", ""))
+        if ranged:
+            start = int(ranged.group(1))
+            end = min(int(ranged.group(2) or end), size - 1)
+            if start > end:
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.end_headers()
+                return
+
+        with open(path, "rb") as image:
+            image.seek(start)
+            data = image.read(end - start + 1)
+
+        self.send_response(206 if ranged else 200)
+        self.send_header("Content-Type", "application/octet-stream")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Accept-Ranges", "bytes")
+        if ranged:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.end_headers()
+        self.wfile.write(data)
+        print(f"firmware {match.group(1)}: bytes {start}-{end} of {size}", flush=True)
+
     def do_POST(self):
         match = DEVICE_PATH.match(urllib.parse.urlparse(self.path).path)
         if not match:
