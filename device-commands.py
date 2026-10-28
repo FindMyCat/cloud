@@ -35,7 +35,7 @@ HOLOGRAM_ORG_ID = os.environ.get("HOLOGRAM_ORG_ID")
 
 # The collar's UDP listener (UdpListener.c) and what dispatchCommand() accepts.
 COLLAR_UDP_PORT = "12345"
-COMMANDS = {"ping", "spoof-ping", "lost", "active", "idle"}
+COMMANDS = {"ping", "ping-wifi", "ping-gps", "spoof-ping", "lost", "active", "idle"}
 
 # The proxy may or may not strip its location prefix, so accept both.
 DEVICE_PATH = re.compile(r"^(?:/api/device-commands)?/devices/(\d+)$")
