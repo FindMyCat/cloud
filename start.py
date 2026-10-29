@@ -33,9 +33,6 @@ from utils import (
 
 TOPIC = re.compile(r"^/[^+#]+$")
 
-# Asked one at a time: (question, .env key that remembers the answer,
-# first-run default, secret). Topic defaults match the collar's
-# CONFIG_MQTT_SN_*_TOPIC, location as set in its local.conf.
 QUESTIONS = [
     ("Location topic", "FMC_LOCATION_TOPIC", "/secret-topic", False),
     ("Status topic", "FMC_STATUS_TOPIC", "/status", False),
@@ -46,6 +43,8 @@ QUESTIONS = [
     ("Device name", "FMC_DEVICE_NAME", "FindMyCat", False),
     ("Device emoji", "FMC_DEVICE_EMOJI", "\U0001F408", False),
     ("Public domain for the app's API", "FMC_DOMAIN", None, False),
+    ("Hologram API key", "HOLOGRAM_API_KEY", None, True),
+    ("Hologram org id", "HOLOGRAM_ORG_ID", None, False),
 ]
 
 

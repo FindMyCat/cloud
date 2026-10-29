@@ -10,6 +10,7 @@ services:
       - "Traccar__BaseUrl=http://traccar:8082"
       - "Traccar__ApiToken=${FMC_TRACCAR_TOKEN:-}"
       - "Hologram__ApiKey=${HOLOGRAM_API_KEY:-}"
+      - "Hologram__OrgId=${HOLOGRAM_ORG_ID:-}"
       - "ConnectionStrings__Default=Data Source=/data/findmycat.db"
       - "FINDMYCAT_ENCRYPTION_KEY=${FINDMYCAT_ENCRYPTION_KEY:?set FINDMYCAT_ENCRYPTION_KEY in .env (openssl rand -base64 32)}"
       - "Authentication__Google__Enabled=false"
