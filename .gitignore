@@ -3,3 +3,4 @@ __pycache__/
 tmp/
 .env
 emqx_certs/
+traefik/

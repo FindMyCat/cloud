@@ -8,7 +8,6 @@ import argparse
 import getpass
 import os
 import re
-import socket
 import subprocess
 import sys
 import urllib.error
@@ -16,7 +15,7 @@ import urllib.error
 from utils import (
     EMQX,
     EMQX_AUTH,
-    PROXY,
+    ENV_FILE,
     TAG,
     TRACCAR,
     bad,
@@ -24,6 +23,7 @@ from utils import (
     dim,
     head,
     ok,
+    read_env,
     request,
     value,
     wait_for,
@@ -32,21 +32,6 @@ from utils import (
 
 MQTT_SN_TOOLS_URL = "https://github.com/njh/mqtt-sn-tools.git"
 MQTT_SN_TOOLS_DIR = "/opt/mqtt-sn-tools"
-
-# The app's API host forwards to Traccar.
-API_FORWARD_HOST = "traccar"
-API_FORWARD_PORT = 8082
-
-# Paths on the API host served by other containers instead of Traccar.
-# NPM proxies the path unchanged, prefix included. Under /api so Traccar's web
-# app service worker passes them to the network instead of serving its page.
-LOCATIONS = [
-    {"path": "/api/device-status", "forward_host": "device-status.instance", "forward_port": 8091},
-    {"path": "/api/device-commands", "forward_host": "device-commands.instance", "forward_port": 8093},
-]
-
-DEFAULT_IDENTITY = "admin@example.com"
-DEFAULT_SECRET = "changeme"
 
 
 def check_user(email, password):
@@ -245,188 +230,6 @@ def emqx_device_status_rule(status_topic, device_status_url, auth):
     )
 
 
-def needs_first_user():
-    """True when no account exists yet, so /api/tokens has nothing to accept."""
-    try:
-        return request(f"{PROXY}/api/", timeout=10).get("setup") is False
-    except Exception:
-        return False
-
-
-def create_first_user(email, password):
-    request(
-        f"{PROXY}/api/users",
-        method="POST",
-        body={
-            "name": "Admin",
-            "nickname": "Admin",
-            "email": email,
-            "roles": ["admin"],
-            "is_disabled": False,
-            "auth": {"type": "password", "secret": password},
-        },
-    )
-
-
-def login(identity, secret):
-    if needs_first_user():
-        create_first_user(identity, secret)
-        print(f"  {'account':<9} {ok('created')} {dim(identity)}")
-
-    try:
-        return request(
-            f"{PROXY}/api/tokens",
-            method="POST",
-            body={"identity": identity, "secret": secret},
-        )["token"]
-    except urllib.error.HTTPError as exc:
-        if exc.code in (400, 401, 403):
-            sys.exit(
-                f"\n{bad('Nginx Proxy Manager rejected those credentials.')}\n"
-                f"Defaults are {DEFAULT_IDENTITY} / {DEFAULT_SECRET}; if you "
-                "set your own, pass --npm-email and --npm-password."
-            )
-        raise
-
-
-def public_ip():
-    try:
-        return request("https://api.ipify.org?format=json", timeout=10)["ip"]
-    except Exception:
-        return None
-
-
-def dns_points_here(domain):
-    """Whether the domain already resolves to this machine.
-
-    Let's Encrypt validates over HTTP, so a record pointing elsewhere fails,
-    and failed attempts count against the rate limit.
-    """
-    try:
-        resolved = socket.gethostbyname(domain)
-    except socket.gaierror:
-        return False, None
-
-    ours = {default_host(), public_ip()} - {None}
-    return resolved in ours, resolved
-
-
-def find_proxy_host(token, domain):
-    for host in request(f"{PROXY}/api/nginx/proxy-hosts", token=token):
-        if domain in host.get("domain_names", []):
-            return host
-    return None
-
-
-def find_certificate(token, domain):
-    for cert in request(f"{PROXY}/api/nginx/certificates", token=token):
-        if domain in cert.get("domain_names", []):
-            return cert
-    return None
-
-
-def request_certificate(token, domain):
-    """Ask for a Let's Encrypt certificate over the HTTP challenge.
-
-    The registration address is the logged-in Nginx Proxy Manager account;
-    2.15 rejects letsencrypt_email and letsencrypt_agree in meta.
-    """
-    return request(
-        f"{PROXY}/api/nginx/certificates",
-        method="POST",
-        token=token,
-        body={
-            "provider": "letsencrypt",
-            "domain_names": [domain],
-            "meta": {"dns_challenge": False},
-        },
-        timeout=180,
-    )
-
-
-def host_payload(domain, forward_host, forward_port, certificate_id):
-    return {
-        "domain_names": [domain],
-        "forward_scheme": "http",
-        "forward_host": forward_host,
-        "forward_port": forward_port,
-        "certificate_id": certificate_id,
-        "ssl_forced": bool(certificate_id),
-        "http2_support": bool(certificate_id),
-        "hsts_enabled": False,
-        "hsts_subdomains": False,
-        "allow_websocket_upgrade": True,
-        "block_exploits": True,
-        "caching_enabled": False,
-        "access_list_id": 0,
-        "advanced_config": "",
-        "locations": [
-            {**location, "forward_scheme": "http", "advanced_config": ""}
-            for location in LOCATIONS
-        ],
-        "meta": {},
-    }
-
-
-def publish_api(domain, npm_email, npm_password, want_certificate, force):
-    """Serve Traccar, and LOCATIONS beside it, over TLS on the domain.
-
-    Re-running updates the proxy host in place rather than duplicating it.
-    """
-    if not wait_for("api", f"{PROXY}/api/", seconds=120):
-        sys.exit("Nginx Proxy Manager is not responding, run ./start.py first")
-
-    token = login(npm_email, npm_password)
-    if npm_password == DEFAULT_SECRET:
-        print(f"  {'login':<9} {warn('still the default admin account')}")
-        print(f"  {'':<9} {dim('change it at ' + PROXY + ' and re-run')}")
-    else:
-        print(f"  {'login':<9} {ok('authenticated')}")
-
-    matches, resolved = dns_points_here(domain)
-    if resolved is None:
-        print(f"  {'dns':<9} {bad(domain + ' does not resolve')}")
-    elif matches:
-        print(f"  {'dns':<9} {ok(resolved)}")
-    else:
-        print(f"  {'dns':<9} {warn(resolved)} {dim('not this host')}")
-
-    if want_certificate and not matches and not force:
-        print(f"  {'cert':<9} {warn('skipped')} {dim('fix DNS and re-run, or pass --force')}")
-        want_certificate = False
-
-    existing = find_proxy_host(token, domain)
-    certificate = find_certificate(token, domain)
-
-    if want_certificate and certificate is None:
-        print(f"  {'cert':<9} {dim('requesting, this can take a minute')}")
-        try:
-            certificate = request_certificate(token, domain)
-            print(f"  {'cert':<9} {ok('issued')} {dim('id ' + str(certificate['id']))}")
-        except urllib.error.HTTPError as exc:
-            print(f"  {'cert':<9} {bad('failed')} {dim(exc.read().decode()[:200])}")
-    elif certificate:
-        print(f"  {'cert':<9} {ok('already issued')} {dim('id ' + str(certificate['id']))}")
-
-    certificate_id = certificate["id"] if certificate else 0
-    payload = host_payload(domain, API_FORWARD_HOST, API_FORWARD_PORT, certificate_id)
-
-    if existing:
-        host = request(f"{PROXY}/api/nginx/proxy-hosts/{existing['id']}",
-                       method="PUT", token=token, body=payload)
-        print(f"  {'host':<9} {ok('updated')} {dim('id ' + str(host['id']))}")
-    else:
-        host = request(f"{PROXY}/api/nginx/proxy-hosts",
-                       method="POST", token=token, body=payload)
-        print(f"  {'host':<9} {ok('created')} {dim('id ' + str(host['id']))}")
-
-    print(f"  {'/':<9} {value(f'{API_FORWARD_HOST}:{API_FORWARD_PORT}')}")
-    for location in LOCATIONS:
-        print(f"  {location['path']:<9} "
-              f"{value(location['forward_host'] + ':' + str(location['forward_port']))}")
-    print(f"  {'ssl':<9} {ok('forced') if certificate_id else warn('none yet')}")
-
-
 def ensure_mqtt_sn_tools():
     publisher = os.path.join(MQTT_SN_TOOLS_DIR, "mqtt-sn-pub")
     if os.path.exists(publisher):
@@ -454,8 +257,6 @@ def ensure_mqtt_sn_tools():
 
 TOPIC = re.compile(r"^/[^+#]+$")
 
-ENV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-
 # Asked one at a time for whatever wasn't passed as a flag: (attribute,
 # question, .env key that remembers the answer, first-run default, secret).
 # Topic defaults match the collar's CONFIG_MQTT_SN_*_TOPIC, location as set in
@@ -470,17 +271,7 @@ QUESTIONS = [
     ("device_name", "Device name", "FMC_DEVICE_NAME", "FindMyCat", False),
     ("device_emoji", "Device emoji", "FMC_DEVICE_EMOJI", "\U0001F408", False),
     ("domain", "Public domain for the app's API", "FMC_DOMAIN", None, False),
-    ("npm_email", "Nginx Proxy Manager email", "FMC_NPM_EMAIL", DEFAULT_IDENTITY, False),
-    ("npm_password", "Nginx Proxy Manager password", "FMC_NPM_PASSWORD", DEFAULT_SECRET, True),
 ]
-
-
-def read_env():
-    if not os.path.exists(ENV_FILE):
-        return {}
-    with open(ENV_FILE) as handle:
-        pairs = (line.strip().split("=", 1) for line in handle if "=" in line)
-        return {key: value for key, value in pairs if not key.startswith("#")}
 
 
 def remember(answers):
@@ -577,12 +368,6 @@ def main():
         help="where the rule engine POSTs WiFi scans to be resolved",
     )
     parser.add_argument("--domain", help="the name the app reaches the API on, e.g. api.example.com")
-    parser.add_argument("--npm-email")
-    parser.add_argument("--npm-password")
-    parser.add_argument("--no-certificate", action="store_true",
-                        help="publish the API without requesting Let's Encrypt")
-    parser.add_argument("--force", action="store_true",
-                        help="request the certificate even if DNS does not resolve here yet")
     parser.add_argument(
         "--emqx-app-id", default=EMQX_AUTH[0], help="EMQX management application id"
     )
@@ -612,10 +397,6 @@ def main():
     emqx_rules(args.location_topic, args.traccar_url, emqx_auth)
     emqx_wifi_scan_rule(args.wifi_scan_topic, args.wifi_locator_url, emqx_auth)
     emqx_device_status_rule(args.status_topic, args.device_status_url, emqx_auth)
-
-    print(f"\n{head('proxy')}")
-    publish_api(args.domain, args.npm_email, args.npm_password,
-                not args.no_certificate, args.force)
 
     # Its own script so the certificate can be replaced on its own; without
     # --force it keeps an existing one, which devices have pinned.

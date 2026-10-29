@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-"""Bring the FindMyCat cloud stack up and report what still needs doing.
+"""Bring the FindMyCat cloud stack up, publish the API, and report what still needs doing.
 
-./start.py
+./start.py --domain api.findmycat.io
 ./start.py --emqx-password 'something-long'   # also replaces admin/public
 
 """
 
 import argparse
-import glob
 import os
 import subprocess
 import sys
@@ -18,7 +17,7 @@ from utils import (
     EMQX,
     EMQX_AUTH,
     EMQX_CONTAINER,
-    PROXY,
+    HERE,
     TAG,
     TRACCAR,
     bad,
@@ -30,6 +29,7 @@ from utils import (
     emqx_status,
     head,
     ok,
+    read_env,
     request,
     value,
     wait_for,
@@ -53,21 +53,6 @@ def set_emqx_password(password):
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-
-
-def published_domains():
-    """Domains Nginx Proxy Manager currently serves.
-
-    Listing them over the API needs a dashboard login, but the generated nginx
-    config lands in the bind mount, so the filesystem answers without one.
-    """
-    names = []
-    for path in glob.glob("data/nginx/proxy_host/*.conf"):
-        with open(path) as handle:
-            for line in handle:
-                if line.strip().startswith("server_name"):
-                    names += line.split()[1:]
-    return sorted({name.rstrip(";") for name in names})
 
 
 def totals(metrics, *keys):
@@ -135,13 +120,17 @@ def main():
         default=default_host(),
         help="address to print in URLs, e.g. a DNS name",
     )
+    parser.add_argument(
+        "--domain",
+        default=read_env().get("FMC_DOMAIN"),
+        help="the name the app reaches the API on; defaults to FMC_DOMAIN in .env",
+    )
     args = parser.parse_args()
 
     compose(COMPOSE_FILES, "up", "-d")
 
     print(head("Starting Services"))
     traccar_ok = wait_for("traccar", f"{TRACCAR}/api/server")
-    proxy_ok = wait_for("proxy", PROXY, seconds=60)
 
     state = {}
 
@@ -163,28 +152,28 @@ def main():
 
     steps = []
 
-    domains = published_domains()
-
-    print(f"\n{head('proxy')}     {value(f'http://{args.host}:81')}")
-    if proxy_ok:
-        for domain in domains:
-            print(f"    published {value('https://' + domain)}")
-        if not domains:
-            print(f"    {warn('nothing published yet')}")
-            steps.append(
-                "Publish the API over TLS on your own domain:\n"
-                "       ./findmycat.py setup --domain your.domain"
-            )
+    print()
+    proxy_ok = False
+    if args.domain:
+        proxy = subprocess.run(
+            [sys.executable, os.path.join(HERE, "setup-proxy.py"), "--domain", args.domain],
+            cwd=HERE,
+        )
+        proxy_ok = proxy.returncode == 0
     else:
-        print(f"    {bad('not responding')}")
+        print(f"{head('proxy')}\n    {warn('no domain yet')}")
+        steps.append(
+            "Publish the API over TLS on your own domain:\n"
+            "       ./start.py --domain your.domain"
+        )
 
     print(f"\n{head('traccar')}   ", end="")
-    if domains:
-        print(value(f"https://{domains[0]}"))
+    if proxy_ok:
+        print(value(f"https://{args.domain}"))
     else:
         print(dim("reachable once you publish it above"))
     if traccar_ok:
-        where = f"https://{domains[0]}" if domains else "that domain"
+        where = f"https://{args.domain}" if proxy_ok else "that domain"
         steps.append(
             f"Register the first Traccar account at {where}\n"
             "       (skip if you already have one; it becomes the administrator)"

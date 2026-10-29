@@ -1,0 +1,28 @@
+services:
+  traefik:
+    container_name: traefik
+    image: traefik:v3.3
+    restart: unless-stopped
+    command:
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # setup.py writes the routes here; Traefik picks up changes without a restart.
+      - "--providers.file.directory=/etc/traefik/dynamic"
+      - "--providers.file.watch=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/acme/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "./traefik:/etc/traefik/dynamic:ro"
+      - "traefik_acme:/acme"
+    networks:
+      - emqx-bridge
+networks:
+  emqx-bridge:
+    driver: bridge
+
+volumes:
+  traefik_acme:

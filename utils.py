@@ -26,13 +26,16 @@ TAG = "FindMyCat"
 COMPOSE_FILES = [
     "docker-compose.traccar.yml",
     "docker-compose.emqx.yml",
-    "docker-compose.ngnix-proxy.yml",
+    "docker-compose.traefik.yml",
     "docker-compose.wifi-locator.yml",
     "docker-compose.postgres.yml",
     "docker-compose.device-status.yml",
     "docker-compose.device-commands.yml",
 ]
-PROXY = "http://localhost:81"
+HERE = os.path.dirname(os.path.abspath(__file__))
+# Traefik watches this directory; setup-proxy.py writes the routes into it.
+ROUTES_FILE = os.path.join(HERE, "traefik", "routes.yml")
+ENV_FILE = os.path.join(HERE, ".env")
 
 COLOR = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
 SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
@@ -185,6 +188,14 @@ def containers(project="cloud"):
         capture_output=True, text=True, check=False,
     )
     return [line.split("\t") for line in result.stdout.strip().splitlines() if line]
+
+
+def read_env():
+    if not os.path.exists(ENV_FILE):
+        return {}
+    with open(ENV_FILE) as handle:
+        pairs = (line.strip().split("=", 1) for line in handle if "=" in line)
+        return {key: value for key, value in pairs if not key.startswith("#")}
 
 
 def default_host():

@@ -4,6 +4,7 @@
     ./findmycat.py start [--emqx-password ...]
     ./findmycat.py setup --location-topic ... --traccar-email ... --traccar-password ...
     ./findmycat.py setup-mqtt-tls --domain api.example.com
+    ./findmycat.py setup-proxy --domain api.example.com
     ./findmycat.py destroy [--yes]
     ./findmycat.py hologram-ping send --device-id ... [--at 300,900,1800]
 
@@ -47,6 +48,8 @@ COMMANDS = {
     "setup": ("setup.py", "Setup the pre-requisities for FindMyCat Cloud."),
     "setup-mqtt-tls": ("setup-mqtt-tls.py",
                        "Give EMQX a TLS listener on 8883 for the devices."),
+    "setup-proxy": ("setup-proxy.py",
+                    "Publish the API on a domain through Traefik."),
     "verify": ("verify.py", "Publish a test position and check the pipeline."),
     "hologram-ping": ("hologram-ping.py",
                       "Send a command to a collar using the Hologram API."),
