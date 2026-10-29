@@ -2,6 +2,7 @@
 """FindMyCat cloud control.
 
     ./findmycat.py start [--emqx-password ...]   # everything; the only one you need
+    ./findmycat.py status
     ./findmycat.py verify --location-topic ... --device-id ...
     ./findmycat.py destroy [--yes]
     ./findmycat.py hologram-ping send --device-id ... [--at 300,900,1800]
@@ -54,6 +55,7 @@ COMMANDS = {
                        "Give EMQX a TLS listener on 8883 for the devices."),
     "setup-proxy": ("setup-proxy.py",
                     "Publish the API on a domain through Traefik."),
+    "status": ("status.py", "Quick health check of every service."),
     "verify": ("verify.py", "Publish a test position and check the pipeline."),
     "hologram-ping": ("hologram-ping.py",
                       "Send a command to a collar using the Hologram API."),

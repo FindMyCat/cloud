@@ -16,27 +16,17 @@ import sys
 from utils import (
     BROKER_CERT,
     COMPOSE_FILES,
-    EMQX,
     EMQX_AUTH,
-    EMQX_CONTAINER,
     ENV_FILE,
-    TAG,
     TRACCAR,
     bad,
     compose,
-    containers,
     default_host,
-    dim,
-    emqx_dashboard_password_is_default,
     emqx_status,
     head,
-    ok,
     read_env,
-    request,
     run_script,
-    value,
     wait_for,
-    warn,
 )
 
 TOPIC = re.compile(r"^/[^+#]+$")
@@ -100,55 +90,6 @@ def ask_questions():
     return answers
 
 
-def totals(metrics, *keys):
-    """Sum a metric across EMQX nodes."""
-    return {key: sum(m.get(key, 0) for m in metrics or []) for key in keys}
-
-
-def rule_engine_report(auth, indent="      "):
-    try:
-        rules = request(f"{EMQX}/rules", auth=auth)["data"]
-    except Exception as exc:
-        print(f"{indent}{bad('unreachable')} ({exc})")
-        return
-
-    ours = [r for r in rules if TAG in (r.get("description") or "")]
-    if not ours:
-        print(f"{indent}{warn('not configured')}")
-        return
-
-    for rule in ours:
-        topics = ", ".join(t.strip('<>"') for t in rule.get("for", []))
-        state = ok("enabled") if rule.get("enabled") else bad("DISABLED")
-        print(f"{indent}{rule['id']}  {state}")
-        print(f"{indent}  topic     {value(topics)}")
-
-        counts = totals(rule.get("metrics"), "matched", "passed", "exception")
-        exceptions = counts["exception"]
-        print(
-            f"{indent}  messages  matched {counts['matched'] or dim('0')}"
-            f"  passed {counts['passed']}"
-            f"  exception {bad(exceptions) if exceptions else '0'}"
-        )
-
-        for action in rule.get("actions", []):
-            resource_id = action.get("params", {}).get("$resource", "")
-            target = resource_id
-            if resource_id:
-                try:
-                    resource = request(f"{EMQX}/resources/{resource_id}", auth=auth)
-                    target = resource["data"]["config"].get("url", resource_id)
-                except Exception:
-                    pass
-            hits = totals(action.get("metrics"), "success", "failed")
-            failed = hits["failed"]
-            print(f"{indent}  action    {action.get('name')} -> {target}")
-            print(
-                f"{indent}            success {ok(hits['success']) if hits['success'] else '0'}"
-                f"  failed {bad(failed) if failed else '0'}"
-            )
-
-
 def set_up(env, emqx_password):
     """Runs each setup script in order, stopping at the first that fails."""
     traccar = ["--email", env["FMC_TRACCAR_EMAIL"], "--device-id", env["FMC_DEVICE_ID"],
@@ -205,62 +146,17 @@ def main():
     emqx_up = wait_for("emqx", check=emqx_check)
     emqx_ok = emqx_up and state.get("value") == "ok"
 
-    print(f"\n{head('containers')}")
-    for name, status in containers():
-        print(f"  {name:<16}{ok(status) if status.startswith('Up') else bad(status)}")
-
-    steps = []
-
     setup_ok = traccar_ok and emqx_ok and set_up(env, args.emqx_password)
-    if not setup_ok:
-        steps.append("Fix the error above, then re-run ./findmycat.py start")
 
-    print(f"\n{head('traccar')}   ", end="")
-    if setup_ok:
-        print(value(f"https://{env['FMC_DOMAIN']}"))
-    elif traccar_ok:
-        print(dim("not published"))
-    else:
-        print(bad("not responding"))
-
-    print(f"\n{head('emqx')}      {value(f'http://{args.host}:18083')}")
-    print(f"    mqtt-sn   {value(f'udp://{args.host}:1885')}")
-    print(f"    mqtt      {dim(f'tcp://{args.host}:1883')}")
-    if os.path.exists(BROKER_CERT):
-        print(f"    mqtt+tls  {value(f'ssl://{args.host}:8883')}")
-    else:
-        print(f"    mqtt+tls  {warn('no certificate')}")
-    if emqx_ok:
-        default = emqx_dashboard_password_is_default()
-        if default is None:
-            print(f"    dashboard {warn('unknown')} {dim('(18083 did not answer)')}")
-        elif default:
-            print(f"    dashboard {warn('default admin/public')}")
-            steps.append(
-                "Replace the default EMQX dashboard login:\n"
-                "       ./findmycat.py start --emqx-password 'something-long'"
-            )
-        print("    rule engine")
-        rule_engine_report(EMQX_AUTH)
-    elif emqx_up:
-        print(f"    api       {bad('credentials rejected')}")
-        steps.append(
-            "EMQX rejected the management API secret on 8081. Check it with\n"
-            "       docker exec %s ./bin/emqx_ctl mgmt list\n"
-            "       then export EMQX_APP_SECRET=..." % EMQX_CONTAINER
-        )
-    else:
-        print(f"    {bad('not responding')}")
+    print()
+    run_script("status.py", "--host", args.host)
 
     if setup_ok:
         print(f"\n{head('test the pipeline')}")
         print(f"  ./findmycat.py verify --location-topic '{env['FMC_LOCATION_TOPIC']}' "
               f"--device-id {env['FMC_DEVICE_ID']}")
-
-    if steps:
-        print(f"\n{head('next steps')}")
-        for number, step in enumerate(steps, 1):
-            print(f"  {number}. {step}")
+    else:
+        print(f"\n{bad('Fix the error above, then re-run ./findmycat.py start')}")
 
     sys.exit(0 if setup_ok else 1)
 
