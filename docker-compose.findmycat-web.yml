@@ -8,16 +8,14 @@ services:
     environment:
       # Reaches Traccar over the docker network, never through the proxy.
       - "Traccar__BaseUrl=http://traccar:8082"
-      # Created by setup-traccar.py; only used while the admin page has none saved.
       - "Traccar__ApiToken=${FMC_TRACCAR_TOKEN:-}"
+      - "Hologram__ApiKey=${HOLOGRAM_API_KEY:-}"
       - "ConnectionStrings__Default=Data Source=/data/findmycat.db"
       - "FINDMYCAT_ENCRYPTION_KEY=${FINDMYCAT_ENCRYPTION_KEY:?set FINDMYCAT_ENCRYPTION_KEY in .env (openssl rand -base64 32)}"
       - "Authentication__Google__Enabled=false"
       - "ASPNETCORE_ENVIRONMENT=Production"
     volumes:
-      # SQLite database; lost on every redeploy without this.
       - "/var/docker/findmycat-web/data:/data:rw"
-      # Login cookie keys; without this every redeploy signs everyone out.
       - "/var/docker/findmycat-web/keys:/root/.aspnet/DataProtection-Keys:rw"
     networks:
       emqx-bridge:
