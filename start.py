@@ -19,7 +19,6 @@ from utils import (
     BROKER_CERT,
     COMPOSE_FILES,
     EMQX_AUTH,
-    ENV_FILE,
     TRACCAR,
     bad,
     compose,
@@ -27,6 +26,7 @@ from utils import (
     emqx_status,
     head,
     read_env,
+    remember,
     run_script,
     wait_for,
 )
@@ -56,18 +56,6 @@ def ask(question, default, secret):
         answer = (getpass.getpass if secret else input)(prompt).strip() or default
         if answer:
             return answer
-
-
-def remember(answers):
-    """Writes answers into .env, replacing earlier ones and keeping other keys."""
-    lines = []
-    if os.path.exists(ENV_FILE):
-        with open(ENV_FILE) as handle:
-            lines = [l for l in handle.read().splitlines() if l.split("=", 1)[0] not in answers]
-    lines += [f"{key}={value}" for key, value in answers.items()]
-    with open(ENV_FILE, "w") as handle:
-        handle.write("\n".join(lines) + "\n")
-    os.chmod(ENV_FILE, 0o600)
 
 
 def ask_questions():
@@ -111,6 +99,9 @@ def set_up(env, emqx_password):
     if not run_script("setup-traccar.py", *traccar,
                       env={**os.environ, "FMC_TRACCAR_PASSWORD": env["FMC_TRACCAR_PASSWORD"]}):
         return False
+    # Picks up the Traccar token setup-traccar.py may have just written to .env;
+    # does nothing when it was already there.
+    compose(["docker-compose.findmycat-web.yml"], "up", "-d", quiet=True)
     print()
     if not run_script("setup-emqx.py", *emqx):
         return False

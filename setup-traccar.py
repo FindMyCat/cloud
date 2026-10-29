@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Make sure Traccar has its admin account and the collar registered.
+"""Make sure Traccar has its admin account, the collar registered, and an API
+token for FindMyCat-Web saved in .env.
 
     FMC_TRACCAR_PASSWORD=secret ./setup-traccar.py --email you@example.com \
         --device-id fmc-collar-01
@@ -12,7 +13,7 @@ import os
 import sys
 import urllib.error
 
-from utils import TRACCAR, bad, dim, head, ok, request, value, wait_for
+from utils import TRACCAR, bad, dim, head, ok, read_env, remember, request, value, wait_for
 
 
 def is_new_server():
@@ -74,6 +75,18 @@ def ensure_device(email, password, device_id, name, emoji):
     print(f"  {'device':<9} {value(device_id)} {ok('registered')} {value(emoji)}")
 
 
+def ensure_api_token(email, password):
+    """FindMyCat-Web reads Traccar with this token. Made once and kept in .env;
+    with no expiration given, Traccar issues one that does not expire."""
+    if read_env().get("FMC_TRACCAR_TOKEN"):
+        print(f"  {'token':<9} {dim('already in .env')}")
+        return
+    token = request(f"{TRACCAR}/api/session/token", method="POST", form=True, body="",
+                    auth=(email, password))
+    remember({"FMC_TRACCAR_TOKEN": token.strip()})
+    print(f"  {'token':<9} {ok('created')} {dim('saved to .env')}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--email", required=True, help="Traccar admin login")
@@ -105,6 +118,7 @@ def main():
         create_admin(args.email, password)
     check_login(args.email, password)
     ensure_device(args.email, password, args.device_id, args.device_name, args.device_emoji)
+    ensure_api_token(args.email, password)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,8 @@ services:
     environment:
       # Reaches Traccar over the docker network, never through the proxy.
       - "Traccar__BaseUrl=http://traccar:8082"
+      # Created by setup-traccar.py; only used while the admin page has none saved.
+      - "Traccar__ApiToken=${FMC_TRACCAR_TOKEN:-}"
       - "ConnectionStrings__Default=Data Source=/data/findmycat.db"
       - "FINDMYCAT_ENCRYPTION_KEY=${FINDMYCAT_ENCRYPTION_KEY:?set FINDMYCAT_ENCRYPTION_KEY in .env (openssl rand -base64 32)}"
       - "Authentication__Google__Enabled=false"

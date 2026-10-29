@@ -210,6 +210,18 @@ def read_env():
         return {key: value for key, value in pairs if not key.startswith("#")}
 
 
+def remember(answers):
+    """Writes answers into .env, replacing earlier ones and keeping other keys."""
+    lines = []
+    if os.path.exists(ENV_FILE):
+        with open(ENV_FILE) as handle:
+            lines = [l for l in handle.read().splitlines() if l.split("=", 1)[0] not in answers]
+    lines += [f"{key}={value}" for key, value in answers.items()]
+    with open(ENV_FILE, "w") as handle:
+        handle.write("\n".join(lines) + "\n")
+    os.chmod(ENV_FILE, 0o600)
+
+
 def default_host():
     result = subprocess.run(["hostname", "-I"], capture_output=True, text=True,
                             check=False)
