@@ -7,7 +7,6 @@
 import argparse
 import os
 import sys
-from concurrent.futures import ThreadPoolExecutor
 
 from utils import (
     BROKER_CERT,
@@ -35,8 +34,9 @@ def totals(metrics, *keys):
     return {key: sum(m.get(key, 0) for m in metrics or []) for key in keys}
 
 
-def check_containers(found):
+def check_containers():
     print(head("containers"))
+    found = containers()
     if not found:
         print(f"  {bad('none running')} {dim('run ./findmycat.py start')}")
     for name, status in found:
@@ -44,29 +44,22 @@ def check_containers(found):
     return bool(found) and all(status.startswith("Up") for _, status in found)
 
 
-def api_error(domain):
-    """None if the API answers over HTTPS, else what went wrong."""
-    if not domain:
-        return "no domain in .env"
-    try:
-        request(f"https://{domain}/api/server", timeout=5)
-        return None
-    except Exception as exc:
-        return str(exc)
-
-
-def check_api(domain, error):
+def check_api(domain):
     print(f"\n{head('api')}")
     if not domain:
-        print(f"  {warn(error)}")
-    elif error:
-        print(f"  {value('https://' + domain)} {bad('down')} {dim(error)}")
-    else:
+        print(f"  {warn('no domain in .env')}")
+        return False
+    url = f"https://{domain}/api/server"
+    try:
+        request(url, timeout=5)
         print(f"  {value('https://' + domain)} {ok('up')}")
-    return error is None
+        return True
+    except Exception as exc:
+        print(f"  {value('https://' + domain)} {bad('down')} {dim(str(exc))}")
+        return False
 
 
-def check_emqx(host, dashboard_is_default, steps):
+def check_emqx(host, steps):
     print(f"\n{head('emqx')}      {value(f'http://{host}:18083')}")
     print(f"  mqtt-sn   {value(f'udp://{host}:1885')}")
     if os.path.exists(BROKER_CERT):
@@ -87,7 +80,7 @@ def check_emqx(host, dashboard_is_default, steps):
         )
         return False
 
-    if dashboard_is_default:
+    if emqx_dashboard_password_is_default():
         print(f"  dashboard {warn('default admin/public')}")
         steps.append(
             "Replace the default EMQX dashboard login:\n"
@@ -118,18 +111,10 @@ def main():
                         help="address to print in URLs, e.g. a DNS name")
     args = parser.parse_args()
 
-    domain = read_env().get("FMC_DOMAIN")
-
-    # The slow checks run side by side; the droplet takes seconds for each.
-    with ThreadPoolExecutor() as pool:
-        found = pool.submit(containers)
-        error = pool.submit(api_error, domain)
-        dashboard_is_default = pool.submit(emqx_dashboard_password_is_default)
-
     steps = []
-    healthy = check_containers(found.result())
-    healthy = check_api(domain, error.result()) and healthy
-    healthy = check_emqx(args.host, dashboard_is_default.result(), steps) and healthy
+    healthy = check_containers()
+    healthy = check_api(read_env().get("FMC_DOMAIN")) and healthy
+    healthy = check_emqx(args.host, steps) and healthy
 
     if steps:
         print(f"\n{head('next steps')}")
