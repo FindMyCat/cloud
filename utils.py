@@ -36,6 +36,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # Traefik watches this directory; setup-proxy.py writes the routes into it.
 ROUTES_FILE = os.path.join(HERE, "traefik", "routes.yml")
 ENV_FILE = os.path.join(HERE, ".env")
+BROKER_CERT = os.path.join(HERE, "emqx_certs", "broker-cert.pem")
 
 COLOR = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
 SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
@@ -188,6 +189,13 @@ def containers(project="cloud"):
         capture_output=True, text=True, check=False,
     )
     return [line.split("\t") for line in result.stdout.strip().splitlines() if line]
+
+
+def run_script(name, *args, env=None):
+    """Run another script in this folder; True if it succeeded."""
+    sys.stdout.flush()  # keep our output above the script's when piped
+    command = [sys.executable, os.path.join(HERE, name), *args]
+    return subprocess.run(command, cwd=HERE, env=env).returncode == 0
 
 
 def read_env():

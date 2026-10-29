@@ -10,79 +10,26 @@ import os
 import re
 import subprocess
 import sys
-import urllib.error
 
 from utils import (
+    BROKER_CERT,
     EMQX,
     EMQX_AUTH,
     ENV_FILE,
     TAG,
-    TRACCAR,
-    bad,
     default_host,
     dim,
     head,
     ok,
     read_env,
     request,
+    run_script,
     value,
-    wait_for,
     warn,
 )
 
 MQTT_SN_TOOLS_URL = "https://github.com/njh/mqtt-sn-tools.git"
 MQTT_SN_TOOLS_DIR = "/opt/mqtt-sn-tools"
-
-
-def check_user(email, password):
-    """Confirm the Traccar account exists"""
-    try:
-        request(
-            f"{TRACCAR}/api/session",
-            method="POST",
-            form=True,
-            body=f"email={email}&password={password}",
-        )
-        print(f"  {'signed in':<9} {ok(email)}")
-        return
-    except urllib.error.HTTPError:
-        print(f"  {'signed in':<9} {bad('failed')} for {email}")
-        sys.exit(
-            "\nIf this is a new install, open the Traccar UI and register the "
-            "account first, then re-run:\n"
-            "  ssh -L 8082:localhost:8082 root@<droplet>\n"
-            "  open http://localhost:8082\n"
-            "The first account you create becomes the administrator."
-        )
-
-
-def ensure_device(email, password, device_id, name, emoji):
-    devices = request(f"{TRACCAR}/api/devices", auth=(email, password))
-    existing = next((d for d in devices if d["uniqueId"] == device_id), None)
-    if existing:
-        if (existing.get("attributes") or {}).get("emoji"):
-            print(f"  {'device':<9} {value(device_id)} {dim('already registered')}")
-            return
-        attributes = dict(existing.get("attributes") or {}, emoji=emoji)
-        request(
-            f"{TRACCAR}/api/devices/{existing['id']}",
-            method="PUT",
-            body=dict(existing, attributes=attributes),
-            auth=(email, password),
-        )
-        print(f"  {'device':<9} {value(device_id)} {ok('emoji added')} {value(emoji)}")
-        return
-    request(
-        f"{TRACCAR}/api/devices",
-        method="POST",
-        body={
-            "name": name,
-            "uniqueId": device_id,
-            "attributes": {"emoji": emoji},
-        },
-        auth=(email, password),
-    )
-    print(f"  {'device':<9} {value(device_id)} {ok('registered')} {value(emoji)}")
 
 
 def emqx_cleanup(kind, auth):
@@ -334,7 +281,7 @@ def main():
     )
     parser.add_argument(
         "--traccar-email",
-        help="existing Traccar login, used to register the device",
+        help="Traccar admin login; created on a fresh Traccar",
     )
     parser.add_argument("--traccar-password")
     parser.add_argument(
@@ -381,32 +328,28 @@ def main():
 
     emqx_auth = (args.emqx_app_id, args.emqx_app_secret)
 
-    print(head("traccar"))
-    if not wait_for("api", f"{TRACCAR}/api/server"):
-        sys.exit("Traccar is not responding, run ./start.py first")
-    check_user(args.traccar_email, args.traccar_password)
-    ensure_device(
-        args.traccar_email,
-        args.traccar_password,
-        args.device_id,
-        args.device_name,
-        args.device_emoji,
+    traccar_ok = run_script(
+        "setup-traccar.py",
+        "--email", args.traccar_email,
+        "--device-id", args.device_id,
+        "--device-name", args.device_name,
+        "--device-emoji", args.device_emoji,
+        env={**os.environ, "FMC_TRACCAR_PASSWORD": args.traccar_password},
     )
+    if not traccar_ok:
+        sys.exit(1)
 
     print(f"\n{head('emqx rule engine')}")
     emqx_rules(args.location_topic, args.traccar_url, emqx_auth)
     emqx_wifi_scan_rule(args.wifi_scan_topic, args.wifi_locator_url, emqx_auth)
     emqx_device_status_rule(args.status_topic, args.device_status_url, emqx_auth)
 
-    # Its own script so the certificate can be replaced on its own; without
-    # --force it keeps an existing one, which devices have pinned.
-    print()
-    here = os.path.dirname(os.path.abspath(__file__))
-    subprocess.run(
-        [sys.executable, os.path.join(here, "setup-mqtt-tls.py"), "--domain", args.domain],
-        cwd=here,
-        check=True,
-    )
+    # Only the first time: devices pin this certificate, so replacing it is a
+    # deliberate ./findmycat.py setup-mqtt-tls --force.
+    if not os.path.exists(BROKER_CERT):
+        print()
+        if not run_script("setup-mqtt-tls.py", "--domain", args.domain):
+            sys.exit(1)
 
     print(f"\n{head('mqtt-sn tools')}")
     publisher = ensure_mqtt_sn_tools()

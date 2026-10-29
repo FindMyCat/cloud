@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """FindMyCat cloud control.
 
-    ./findmycat.py start [--emqx-password ...]
+    ./findmycat.py start [--emqx-password ...]   # everything; the only one you need
     ./findmycat.py setup --location-topic ... --traccar-email ... --traccar-password ...
     ./findmycat.py setup-mqtt-tls --domain api.example.com
     ./findmycat.py setup-proxy --domain api.example.com
@@ -50,6 +50,8 @@ COMMANDS = {
                        "Give EMQX a TLS listener on 8883 for the devices."),
     "setup-proxy": ("setup-proxy.py",
                     "Publish the API on a domain through Traefik."),
+    "setup-traccar": ("setup-traccar.py",
+                      "Create the Traccar admin account and register the collar."),
     "verify": ("verify.py", "Publish a test position and check the pipeline."),
     "hologram-ping": ("hologram-ping.py",
                       "Send a command to a collar using the Hologram API."),

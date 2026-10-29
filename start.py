@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Bring the FindMyCat cloud stack up, publish the API, and report what still needs doing.
+"""Bring the whole FindMyCat cloud up: containers, Traccar, EMQX rules, the
+MQTT certificate and the proxy. Safe to re-run; asks only for what .env lacks.
 
-./start.py --domain api.findmycat.io
+./start.py
 ./start.py --emqx-password 'something-long'   # also replaces admin/public
 
 """
@@ -10,14 +11,13 @@ import argparse
 import os
 import subprocess
 import sys
-BROKER_CERT = "emqx_certs/broker-cert.pem"
 
 from utils import (
+    BROKER_CERT,
     COMPOSE_FILES,
     EMQX,
     EMQX_AUTH,
     EMQX_CONTAINER,
-    HERE,
     TAG,
     TRACCAR,
     bad,
@@ -31,6 +31,7 @@ from utils import (
     ok,
     read_env,
     request,
+    run_script,
     value,
     wait_for,
     warn,
@@ -70,12 +71,6 @@ def rule_engine_report(steps, auth, indent="      "):
     ours = [r for r in rules if TAG in (r.get("description") or "")]
     if not ours:
         print(f"{indent}{warn('not configured')}")
-        steps.append(
-            "Configure the EMQX rule engine:\n"
-            "       ./setup.py --location-topic '/your-topic' \\\n"
-            "         --traccar-email ... --traccar-password ... \\\n"
-            "         --device-id ..."
-        )
         return
 
     for rule in ours:
@@ -120,11 +115,6 @@ def main():
         default=default_host(),
         help="address to print in URLs, e.g. a DNS name",
     )
-    parser.add_argument(
-        "--domain",
-        default=read_env().get("FMC_DOMAIN"),
-        help="the name the app reaches the API on; defaults to FMC_DOMAIN in .env",
-    )
     args = parser.parse_args()
 
     compose(COMPOSE_FILES, "up", "-d")
@@ -152,34 +142,23 @@ def main():
 
     steps = []
 
+    # Asks for anything .env doesn't have yet, then configures Traccar and EMQX.
     print()
-    proxy_ok = False
-    if args.domain:
-        proxy = subprocess.run(
-            [sys.executable, os.path.join(HERE, "setup-proxy.py"), "--domain", args.domain],
-            cwd=HERE,
-        )
-        proxy_ok = proxy.returncode == 0
-    else:
-        print(f"{head('proxy')}\n    {warn('no domain yet')}")
-        steps.append(
-            "Publish the API over TLS on your own domain:\n"
-            "       ./start.py --domain your.domain"
-        )
+    setup_ok = traccar_ok and emqx_ok and run_script("setup.py")
+    if not setup_ok:
+        steps.append("Fix the error above, then re-run ./findmycat.py start")
+
+    print()
+    domain = read_env().get("FMC_DOMAIN")
+    proxy_ok = setup_ok and run_script("setup-proxy.py", "--domain", domain)
 
     print(f"\n{head('traccar')}   ", end="")
     if proxy_ok:
-        print(value(f"https://{args.domain}"))
+        print(value(f"https://{domain}"))
+    elif traccar_ok:
+        print(dim("not published"))
     else:
-        print(dim("reachable once you publish it above"))
-    if traccar_ok:
-        where = f"https://{args.domain}" if proxy_ok else "that domain"
-        steps.append(
-            f"Register the first Traccar account at {where}\n"
-            "       (skip if you already have one; it becomes the administrator)"
-        )
-    else:
-        print(f"    {bad('not responding')}")
+        print(bad("not responding"))
 
     print(f"\n{head('emqx')}      {value(f'http://{args.host}:18083')}")
     print(f"    mqtt-sn   {value(f'udp://{args.host}:1885')}")
@@ -188,10 +167,6 @@ def main():
         print(f"    mqtt+tls  {value(f'ssl://{args.host}:8883')}")
     else:
         print(f"    mqtt+tls  {warn('no certificate')}")
-        steps.append(
-            "Give the devices a TLS listener they can verify:\n"
-            f"       ./setup-mqtt-tls.py --domain {args.host}"
-        )
     if emqx_ok:
         default = emqx_dashboard_password_is_default()
         if default is None:
