@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Bring the whole FindMyCat cloud up: containers, Traccar, EMQX rules, the
-MQTT certificate and the proxy. Safe to re-run; asks only for what .env lacks.
+MQTT certificate and the proxy. Safe to re-run; answers are saved in .env.
 
 ./start.py
 ./start.py --emqx-password 'something-long'   # also replaces admin/public
@@ -8,8 +8,9 @@ MQTT certificate and the proxy. Safe to re-run; asks only for what .env lacks.
 """
 
 import argparse
+import getpass
 import os
-import subprocess
+import re
 import sys
 
 from utils import (
@@ -18,6 +19,7 @@ from utils import (
     EMQX,
     EMQX_AUTH,
     EMQX_CONTAINER,
+    ENV_FILE,
     TAG,
     TRACCAR,
     bad,
@@ -37,23 +39,65 @@ from utils import (
     warn,
 )
 
+TOPIC = re.compile(r"^/[^+#]+$")
 
-def set_emqx_password(password):
-    subprocess.run(
-        [
-            "docker",
-            "exec",
-            EMQX_CONTAINER,
-            "./bin/emqx_ctl",
-            "admins",
-            "passwd",
-            "admin",
-            password,
-        ],
-        check=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+# Asked one at a time: (question, .env key that remembers the answer,
+# first-run default, secret). Topic defaults match the collar's
+# CONFIG_MQTT_SN_*_TOPIC, location as set in its local.conf.
+QUESTIONS = [
+    ("Location topic", "FMC_LOCATION_TOPIC", "/secret-topic", False),
+    ("Status topic", "FMC_STATUS_TOPIC", "/status", False),
+    ("WiFi scan topic", "FMC_WIFI_SCAN_TOPIC", "/wifi-scan", False),
+    ("Traccar email", "FMC_TRACCAR_EMAIL", None, False),
+    ("Traccar password", "FMC_TRACCAR_PASSWORD", None, True),
+    ("Device id (the collar's MQTT client id)", "FMC_DEVICE_ID", None, False),
+    ("Device name", "FMC_DEVICE_NAME", "FindMyCat", False),
+    ("Device emoji", "FMC_DEVICE_EMOJI", "\U0001F408", False),
+    ("Public domain for the app's API", "FMC_DOMAIN", None, False),
+]
+
+
+def ask(question, default, secret):
+    shown = "saved" if secret else default
+    prompt = f"{question} [{shown}]: " if default else f"{question}: "
+    while True:
+        answer = (getpass.getpass if secret else input)(prompt).strip() or default
+        if answer:
+            return answer
+
+
+def remember(answers):
+    """Writes answers into .env, replacing earlier ones and keeping other keys."""
+    lines = []
+    if os.path.exists(ENV_FILE):
+        with open(ENV_FILE) as handle:
+            lines = [l for l in handle.read().splitlines() if l.split("=", 1)[0] not in answers]
+    lines += [f"{key}={value}" for key, value in answers.items()]
+    with open(ENV_FILE, "w") as handle:
+        handle.write("\n".join(lines) + "\n")
+    os.chmod(ENV_FILE, 0o600)
+
+
+def ask_questions():
+    """Every answer, keyed by its .env name. Prompts on a terminal, with the
+    saved answer as the default; otherwise takes .env as it is."""
+    saved = read_env()
+    answers = {}
+
+    for question, key, default, secret in QUESTIONS:
+        default = saved.get(key, default)
+        answer = ask(question, default, secret) if sys.stdin.isatty() else default
+        while key.endswith("_TOPIC") and answer and not TOPIC.match(answer):
+            if not sys.stdin.isatty():
+                sys.exit(f"{key} must start with / and contain no MQTT wildcards")
+            print("  must start with / and contain no MQTT wildcards")
+            answer = ask(question, default, secret)
+        if not answer:
+            sys.exit(f"{key} is not set in .env")
+        answers[key] = answer
+
+    remember(answers)
+    return answers
 
 
 def totals(metrics, *keys):
@@ -61,7 +105,7 @@ def totals(metrics, *keys):
     return {key: sum(m.get(key, 0) for m in metrics or []) for key in keys}
 
 
-def rule_engine_report(steps, auth, indent="      "):
+def rule_engine_report(auth, indent="      "):
     try:
         rules = request(f"{EMQX}/rules", auth=auth)["data"]
     except Exception as exc:
@@ -105,6 +149,32 @@ def rule_engine_report(steps, auth, indent="      "):
             )
 
 
+def set_up(env, emqx_password):
+    """Runs each setup script in order, stopping at the first that fails."""
+    traccar = ["--email", env["FMC_TRACCAR_EMAIL"], "--device-id", env["FMC_DEVICE_ID"],
+               "--device-name", env["FMC_DEVICE_NAME"], "--device-emoji", env["FMC_DEVICE_EMOJI"]]
+    emqx = ["--location-topic", env["FMC_LOCATION_TOPIC"], "--status-topic", env["FMC_STATUS_TOPIC"],
+            "--wifi-scan-topic", env["FMC_WIFI_SCAN_TOPIC"]]
+    if emqx_password:
+        emqx += ["--dashboard-password", emqx_password]
+
+    print()
+    if not run_script("setup-traccar.py", *traccar,
+                      env={**os.environ, "FMC_TRACCAR_PASSWORD": env["FMC_TRACCAR_PASSWORD"]}):
+        return False
+    print()
+    if not run_script("setup-emqx.py", *emqx):
+        return False
+    # Only the first time: devices pin this certificate, so replacing it is a
+    # deliberate ./findmycat.py setup-mqtt-tls --force.
+    if not os.path.exists(BROKER_CERT):
+        print()
+        if not run_script("setup-mqtt-tls.py", "--domain", env["FMC_DOMAIN"]):
+            return False
+    print()
+    return run_script("setup-proxy.py", "--domain", env["FMC_DOMAIN"])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -116,6 +186,8 @@ def main():
         help="address to print in URLs, e.g. a DNS name",
     )
     args = parser.parse_args()
+
+    env = ask_questions()
 
     compose(COMPOSE_FILES, "up", "-d")
 
@@ -133,28 +205,19 @@ def main():
     emqx_up = wait_for("emqx", check=emqx_check)
     emqx_ok = emqx_up and state.get("value") == "ok"
 
-    if emqx_up and args.emqx_password:
-        set_emqx_password(args.emqx_password)
-
     print(f"\n{head('containers')}")
     for name, status in containers():
         print(f"  {name:<16}{ok(status) if status.startswith('Up') else bad(status)}")
 
     steps = []
 
-    # Asks for anything .env doesn't have yet, then configures Traccar and EMQX.
-    print()
-    setup_ok = traccar_ok and emqx_ok and run_script("setup.py")
+    setup_ok = traccar_ok and emqx_ok and set_up(env, args.emqx_password)
     if not setup_ok:
         steps.append("Fix the error above, then re-run ./findmycat.py start")
 
-    print()
-    domain = read_env().get("FMC_DOMAIN")
-    proxy_ok = setup_ok and run_script("setup-proxy.py", "--domain", domain)
-
     print(f"\n{head('traccar')}   ", end="")
-    if proxy_ok:
-        print(value(f"https://{domain}"))
+    if setup_ok:
+        print(value(f"https://{env['FMC_DOMAIN']}"))
     elif traccar_ok:
         print(dim("not published"))
     else:
@@ -175,12 +238,10 @@ def main():
             print(f"    dashboard {warn('default admin/public')}")
             steps.append(
                 "Replace the default EMQX dashboard login:\n"
-                "       ./start.py --emqx-password 'something-long'"
+                "       ./findmycat.py start --emqx-password 'something-long'"
             )
-        else:
-            pass
         print("    rule engine")
-        rule_engine_report(steps, EMQX_AUTH)
+        rule_engine_report(EMQX_AUTH)
     elif emqx_up:
         print(f"    api       {bad('credentials rejected')}")
         steps.append(
@@ -191,12 +252,17 @@ def main():
     else:
         print(f"    {bad('not responding')}")
 
+    if setup_ok:
+        print(f"\n{head('test the pipeline')}")
+        print(f"  ./findmycat.py verify --location-topic '{env['FMC_LOCATION_TOPIC']}' "
+              f"--device-id {env['FMC_DEVICE_ID']}")
+
     if steps:
         print(f"\n{head('next steps')}")
         for number, step in enumerate(steps, 1):
             print(f"  {number}. {step}")
 
-    sys.exit(0 if (traccar_ok and emqx_ok) else 1)
+    sys.exit(0 if setup_ok else 1)
 
 
 if __name__ == "__main__":

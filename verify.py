@@ -12,8 +12,23 @@ import time
 
 from utils import EMQX, EMQX_AUTH, TAG, bad, default_host, dim, head, ok, request, warn
 
-MQTT_SN_PUB = "/opt/mqtt-sn-tools/mqtt-sn-pub"
+MQTT_SN_TOOLS_URL = "https://github.com/njh/mqtt-sn-tools.git"
+MQTT_SN_TOOLS_DIR = "/opt/mqtt-sn-tools"
+MQTT_SN_PUB = os.path.join(MQTT_SN_TOOLS_DIR, "mqtt-sn-pub")
 SAMPLE = '{"msg":"0.0,0.0,8,21,85"}'
+
+
+def ensure_mqtt_sn_tools():
+    """Builds the MQTT-SN client this script publishes with, the first time."""
+    if os.path.exists(MQTT_SN_PUB):
+        return
+    print(f"  {dim('building mqtt-sn-tools, needs git and build-essential')}")
+    try:
+        if not os.path.isdir(os.path.join(MQTT_SN_TOOLS_DIR, ".git")):
+            subprocess.run(["git", "clone", "-q", MQTT_SN_TOOLS_URL, MQTT_SN_TOOLS_DIR], check=True)
+        subprocess.run(["make", "-s"], cwd=MQTT_SN_TOOLS_DIR, check=True, stdout=subprocess.DEVNULL)
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        sys.exit(f"could not build mqtt-sn-tools: {exc}")
 
 
 def counters(auth, topic):
@@ -42,7 +57,7 @@ def counters(auth, topic):
         return totals
 
     sys.exit(
-        f"no FindMyCat rule found on {topic}, run ./findmycat.py setup first"
+        f"no FindMyCat rule found on {topic}, run ./findmycat.py start first"
     )
 
 
@@ -66,8 +81,7 @@ def main():
     )
     args = parser.parse_args()
 
-    if not os.path.exists(MQTT_SN_PUB):
-        sys.exit(f"{MQTT_SN_PUB} not found, run ./findmycat.py setup first")
+    ensure_mqtt_sn_tools()
 
     auth = (args.emqx_app_id, args.emqx_app_secret)
     before = counters(auth, args.location_topic)

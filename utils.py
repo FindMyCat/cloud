@@ -1,4 +1,4 @@
-"""Shared helpers for start.py, setup.py and destroy.py.
+"""Shared helpers for start.py, the setup-* scripts and destroy.py.
 
 Stdlib only, no pip install needed.
 """

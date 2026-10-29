@@ -2,15 +2,16 @@
 """FindMyCat cloud control.
 
     ./findmycat.py start [--emqx-password ...]   # everything; the only one you need
-    ./findmycat.py setup --location-topic ... --traccar-email ... --traccar-password ...
-    ./findmycat.py setup-mqtt-tls --domain api.example.com
-    ./findmycat.py setup-proxy --domain api.example.com
+    ./findmycat.py verify --location-topic ... --device-id ...
     ./findmycat.py destroy [--yes]
     ./findmycat.py hologram-ping send --device-id ... [--at 300,900,1800]
 
-Each command is also runnable directly as start.py, setup.py or destroy.py;
-this is just a single entry point. Arguments after the command are passed
-through untouched, so `./findmycat.py setup --help` works as expected.
+start runs the setup-* steps in order; each is also a command of its own,
+e.g. `./findmycat.py setup-mqtt-tls --domain api.example.com --force`.
+
+Each command is also runnable directly as its script, e.g. start.py; this is
+just a single entry point. Arguments after the command are passed through
+untouched, so `./findmycat.py start --help` works as expected.
 """
 
 import os
@@ -44,14 +45,15 @@ Welcome to FindMyCat Cloud Setup! v{VERSION}
 """
 
 COMMANDS = {
-    "start": ("start.py", "Starts the FindMyCat Cloud Stack"),
-    "setup": ("setup.py", "Setup the pre-requisities for FindMyCat Cloud."),
+    "start": ("start.py", "Set up and start the whole FindMyCat Cloud Stack."),
+    "setup-traccar": ("setup-traccar.py",
+                      "Create the Traccar admin account and register the collar."),
+    "setup-emqx": ("setup-emqx.py",
+                   "Point the EMQX rule engine at Traccar and the services."),
     "setup-mqtt-tls": ("setup-mqtt-tls.py",
                        "Give EMQX a TLS listener on 8883 for the devices."),
     "setup-proxy": ("setup-proxy.py",
                     "Publish the API on a domain through Traefik."),
-    "setup-traccar": ("setup-traccar.py",
-                      "Create the Traccar admin account and register the collar."),
     "verify": ("verify.py", "Publish a test position and check the pipeline."),
     "hologram-ping": ("hologram-ping.py",
                       "Send a command to a collar using the Hologram API."),
