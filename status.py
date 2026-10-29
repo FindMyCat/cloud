@@ -9,6 +9,7 @@ import os
 import sys
 
 from utils import (
+    API_HEALTH_PATH,
     BROKER_CERT,
     EMQX,
     EMQX_AUTH,
@@ -49,7 +50,7 @@ def check_api(domain):
     if not domain:
         print(f"  {warn('no domain in .env')}")
         return False
-    url = f"https://{domain}/api/server"
+    url = f"https://{domain}{API_HEALTH_PATH}"
     try:
         request(url, timeout=5)
         print(f"  {value('https://' + domain)} {ok('up')}")

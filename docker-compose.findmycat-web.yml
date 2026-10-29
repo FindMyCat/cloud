@@ -1,0 +1,26 @@
+services:
+  findmycat-web:
+    container_name: findmycat-web
+    # Built from the FindMyCat-Web repo and loaded onto this host, not pulled.
+    image: findmycat-web:local
+    pull_policy: never
+    restart: unless-stopped
+    environment:
+      # Reaches Traccar over the docker network, never through the proxy.
+      - "Traccar__BaseUrl=http://traccar:8082"
+      - "ConnectionStrings__Default=Data Source=/data/findmycat.db"
+      - "FINDMYCAT_ENCRYPTION_KEY=${FINDMYCAT_ENCRYPTION_KEY:?set FINDMYCAT_ENCRYPTION_KEY in .env (openssl rand -base64 32)}"
+      - "Authentication__Google__Enabled=false"
+      - "ASPNETCORE_ENVIRONMENT=Production"
+    volumes:
+      # SQLite database; lost on every redeploy without this.
+      - "/var/docker/findmycat-web/data:/data:rw"
+      # Login cookie keys; without this every redeploy signs everyone out.
+      - "/var/docker/findmycat-web/keys:/root/.aspnet/DataProtection-Keys:rw"
+    networks:
+      emqx-bridge:
+        aliases:
+        - findmycat-web.instance
+networks:
+  emqx-bridge:
+    driver: bridge

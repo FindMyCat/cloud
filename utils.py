@@ -31,7 +31,11 @@ COMPOSE_FILES = [
     "docker-compose.postgres.yml",
     "docker-compose.device-status.yml",
     "docker-compose.device-commands.yml",
+    "docker-compose.findmycat-web.yml",
 ]
+# A FindMyCat-Web endpoint that answers without a login, so a 200 shows the
+# proxy, the certificate and the app all work.
+API_HEALTH_PATH = "/auth/providers"
 HERE = os.path.dirname(os.path.abspath(__file__))
 # Traefik watches this directory; setup-proxy.py writes the routes into it.
 ROUTES_FILE = os.path.join(HERE, "traefik", "routes.yml")

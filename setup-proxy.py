@@ -11,16 +11,16 @@ import os
 import socket
 import sys
 
-from utils import ROUTES_FILE, bad, default_host, dim, head, ok, request, value, wait_for
+from utils import API_HEALTH_PATH, ROUTES_FILE, bad, default_host, dim, head, ok, request, value, wait_for
 
-# Path prefix on the domain, and the container that serves it. Traccar takes
-# everything not listed. The others sit under /api so Traccar's web app service
-# worker passes them to the network instead of serving its page.
+# Path prefix on the domain, and the container that serves it. FindMyCat-Web
+# takes everything not listed: the web app, its API and live updates. Traccar
+# stays private; FindMyCat-Web reaches it over the docker network.
 ROUTES = {
     "/api/device-status": "http://device-status.instance:8091",
     "/api/device-commands": "http://device-commands.instance:8093",
 }
-TRACCAR = "http://traccar:8082"
+WEB = "http://findmycat-web.instance:8080"
 
 
 def dns_points_here(domain):
@@ -50,8 +50,8 @@ def service(url):
 def traefik_config(domain):
     host = f"Host(`{domain}`)"
 
-    routers = {"traccar": router(host, "traccar")}
-    services = {"traccar": service(TRACCAR)}
+    routers = {"web": router(host, "web")}
+    services = {"web": service(WEB)}
 
     for path, url in ROUTES.items():
         name = path.rsplit("/", 1)[-1]
@@ -61,7 +61,7 @@ def traefik_config(domain):
     # Plain HTTP on port 80 only redirects to HTTPS.
     routers["redirect"] = {
         "rule": host,
-        "service": "traccar",
+        "service": "web",
         "entryPoints": ["web"],
         "middlewares": ["https"],
     }
@@ -90,12 +90,12 @@ def main():
         json.dump(traefik_config(args.domain), handle, indent=2)
     print(f"  {'routes':<9} {ok('written')} {dim(ROUTES_FILE)}")
 
-    print(f"  {'/':<9} {value(TRACCAR)}")
+    print(f"  {'/':<9} {value(WEB)}")
     for path, url in ROUTES.items():
         print(f"  {path:<9} {value(url)}")
 
     # The certificate is issued on the first request, which can take a minute.
-    if not wait_for("https", f"https://{args.domain}/api/server", seconds=180):
+    if not wait_for("https", f"https://{args.domain}{API_HEALTH_PATH}", seconds=180):
         print(f"  {dim('check docker logs traefik')}")
         sys.exit(1)
 

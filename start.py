@@ -8,9 +8,11 @@ MQTT certificate and the proxy. Safe to re-run; answers are saved in .env.
 """
 
 import argparse
+import base64
 import getpass
 import os
 import re
+import secrets
 import sys
 
 from utils import (
@@ -85,6 +87,12 @@ def ask_questions():
         if not answer:
             sys.exit(f"{key} is not set in .env")
         answers[key] = answer
+
+    # Not a question: FindMyCat-Web encrypts stored credentials with it, and a
+    # new one makes them unreadable, so it is made once and then kept.
+    answers["FINDMYCAT_ENCRYPTION_KEY"] = (
+        saved.get("FINDMYCAT_ENCRYPTION_KEY") or base64.b64encode(secrets.token_bytes(32)).decode()
+    )
 
     remember(answers)
     return answers
