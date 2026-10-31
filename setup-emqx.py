@@ -8,6 +8,7 @@ Re-running replaces the FindMyCat rules rather than duplicating them.
 """
 
 import argparse
+import os
 import subprocess
 import sys
 
@@ -123,11 +124,11 @@ def emqx_rules(location_topic, traccar_url, auth):
     )
 
 
-def emqx_device_status_rule(status_topic, device_status_url, auth):
-    """Every status report goes to device-status, which keeps it in Postgres.
+def emqx_device_status_rule(status_topic, device_status_url, ingest_key, auth):
+    """Every status report goes to FindMyCat-Web, which stores it.
 
     The collar's JSON is passed through whole, so a new field needs no rule
-    change; device-status only reads command and status from it.
+    change.
     """
     resource = request(
         f"{EMQX}/resources",
@@ -139,7 +140,7 @@ def emqx_device_status_rule(status_topic, device_status_url, auth):
             "config": {
                 "url": device_status_url,
                 "method": "POST",
-                "headers": {"content-type": "application/json"},
+                "headers": {"content-type": "application/json", "x-api-key": ingest_key},
                 "connect_timeout": "5s",
                 "request_timeout": "5s",
                 "pool_size": 2,
@@ -182,7 +183,7 @@ def main():
                         help="where the rule engine POSTs positions")
     parser.add_argument("--wifi-locator-url", default="http://wifi-locator.instance:8090",
                         help="where the rule engine POSTs WiFi scans to be resolved")
-    parser.add_argument("--device-status-url", default="http://device-status.instance:8092",
+    parser.add_argument("--device-status-url", default="http://findmycat-web.instance:8080/api/ingest/status",
                         help="where the rule engine POSTs status reports to be stored")
     parser.add_argument("--dashboard-password",
                         help="replace the default admin/public dashboard login")
@@ -200,7 +201,11 @@ def main():
 
     emqx_rules(args.location_topic, args.traccar_url, auth)
     emqx_wifi_scan_rule(args.wifi_scan_topic, args.wifi_locator_url, auth)
-    emqx_device_status_rule(args.status_topic, args.device_status_url, auth)
+    # From the environment, so it never shows up in the process list.
+    ingest_key = os.environ.get("FMC_INGEST_KEY")
+    if not ingest_key:
+        sys.exit("set FMC_INGEST_KEY")
+    emqx_device_status_rule(args.status_topic, args.device_status_url, ingest_key, auth)
 
     if args.dashboard_password:
         set_dashboard_password(args.dashboard_password)

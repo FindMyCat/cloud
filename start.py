@@ -80,6 +80,8 @@ def ask_questions():
     answers["FINDMYCAT_ENCRYPTION_KEY"] = (
         saved.get("FINDMYCAT_ENCRYPTION_KEY") or base64.b64encode(secrets.token_bytes(32)).decode()
     )
+    # EMQX and wifi-locator send it as x-api-key when posting collar status to FindMyCat-Web.
+    answers["FMC_INGEST_KEY"] = saved.get("FMC_INGEST_KEY") or secrets.token_hex(32)
 
     remember(answers)
     return answers
@@ -102,7 +104,7 @@ def set_up(env, emqx_password):
     # does nothing when it was already there.
     compose(["docker-compose.findmycat-web.yml"], "up", "-d", quiet=True)
     print()
-    if not run_script("setup-emqx.py", *emqx):
+    if not run_script("setup-emqx.py", *emqx, env={**os.environ, "FMC_INGEST_KEY": env["FMC_INGEST_KEY"]}):
         return False
     # Only the first time: devices pin this certificate, so replacing it is a
     # deliberate ./findmycat.py setup-mqtt-tls --force.

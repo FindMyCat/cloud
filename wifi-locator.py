@@ -23,8 +23,9 @@ GEOLOCATE_URL = "https://www.googleapis.com/geolocation/v1/geolocate"
 TRACCAR_OSMAND_URL = os.environ.get("TRACCAR_OSMAND_URL", "http://traccar.instance:5055")
 LISTEN_PORT = int(os.environ.get("WIFI_LOCATOR_PORT", "8090"))
 DEVICE_STATUS_INGEST_URL = os.environ.get(
-    "DEVICE_STATUS_INGEST_URL", "http://device-status.instance:8092"
+    "DEVICE_STATUS_INGEST_URL", "http://findmycat-web.instance:8080/api/ingest/status"
 )
+INGEST_KEY = os.environ.get("FMC_INGEST_KEY", "")
 
 # Mirrors WiFi/wifi_scan.h on the collar and wifi_scan_frame.h on the station.
 MESSAGE_TYPE = 0x01
@@ -105,7 +106,7 @@ def report_ping(device_id, status, **fields):
     req = urllib.request.Request(
         DEVICE_STATUS_INGEST_URL,
         data=json.dumps(body).encode(),
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "x-api-key": INGEST_KEY},
         method="POST",
     )
     try:
