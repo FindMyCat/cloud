@@ -27,7 +27,6 @@ COMPOSE_FILES = [
     "docker-compose.traccar.yml",
     "docker-compose.emqx.yml",
     "docker-compose.traefik.yml",
-    "docker-compose.wifi-locator.yml",
     "docker-compose.findmycat-web.yml",
 ]
 # A FindMyCat-Web endpoint that answers without a login, so a 200 shows the

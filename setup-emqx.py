@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Point the EMQX rule engine at Traccar, wifi-locator and FindMyCat Central Service
+"""Point the EMQX rule engine at Traccar and FindMyCat Central Service
 
     ./setup-emqx.py --location-topic '/your-topic'
     ./setup-emqx.py --location-topic '/your-topic' --dashboard-password 'something-long'
@@ -46,34 +46,35 @@ def emqx_add_rule(sql, description, template, resource, auth, topic,
     print(f"  {'rule':<9} {ok(rule)} {dim('on ' + topic)}")
 
 
-def emqx_wifi_scan_rule(wifi_scan_topic, wifi_locator_url, auth):
-    """Over LTE the collar publishes its raw WiFi scan; wifi-locator resolves it."""
+def emqx_wifi_scan_rule(wifi_scan_topic, wifi_scan_url, ingest_key, auth):
+    """Over LTE the collar publishes its raw WiFi scan; FindMyCat-Web resolves it."""
     resource = request(
         f"{EMQX}/resources",
         method="POST",
         auth=auth,
         body={
             "type": "web_hook",
-            "description": f"{TAG} wifi-locator",
+            "description": f"{TAG} wifi-scan",
             "config": {
-                "url": wifi_locator_url,
+                "url": wifi_scan_url,
                 "method": "POST",
-                "headers": {"content-type": "application/x-www-form-urlencoded"},
+                "headers": {"content-type": "application/json", "x-api-key": ingest_key},
                 "connect_timeout": "5s",
                 "request_timeout": "15s",
                 "pool_size": 2,
             },
         },
     )["data"]["id"]
-    print(f"  {'resource':<9} {ok(resource)} {dim('-> ' + wifi_locator_url)}")
+    print(f"  {'resource':<9} {ok(resource)} {dim('-> ' + wifi_scan_url)}")
 
     emqx_add_rule(
         f'SELECT payload as scan, clientid FROM "{wifi_scan_topic}"',
-        f"{TAG}: WiFi scan -> wifi-locator",
-        "id=${clientid}&scan=${scan}",
+        f"{TAG}: WiFi scan -> FindMyCat-Web",
+        '{"id": "${clientid}", "scan": "${scan}"}',
         resource,
         auth,
         wifi_scan_topic,
+        content_type="application/json",
     )
 
 
@@ -181,7 +182,7 @@ def main():
                         help="MQTT topic the collar publishes raw WiFi scans to over LTE")
     parser.add_argument("--traccar-url", default="http://traccar.instance:5055",
                         help="where the rule engine POSTs positions")
-    parser.add_argument("--wifi-locator-url", default="http://wifi-locator.instance:8090",
+    parser.add_argument("--wifi-scan-url", default="http://findmycat-web.instance:8080/api/ingest/wifi-scan",
                         help="where the rule engine POSTs WiFi scans to be resolved")
     parser.add_argument("--device-status-url", default="http://findmycat-web.instance:8080/api/ingest/status",
                         help="where the rule engine POSTs status reports to be stored")
@@ -199,12 +200,13 @@ def main():
     if emqx_status(auth) != "ok":
         sys.exit("EMQX is not responding or rejected the management API secret")
 
-    emqx_rules(args.location_topic, args.traccar_url, auth)
-    emqx_wifi_scan_rule(args.wifi_scan_topic, args.wifi_locator_url, auth)
     # From the environment, so it never shows up in the process list.
     ingest_key = os.environ.get("FMC_INGEST_KEY")
     if not ingest_key:
         sys.exit("set FMC_INGEST_KEY")
+
+    emqx_rules(args.location_topic, args.traccar_url, auth)
+    emqx_wifi_scan_rule(args.wifi_scan_topic, args.wifi_scan_url, ingest_key, auth)
     emqx_device_status_rule(args.status_topic, args.device_status_url, ingest_key, auth)
 
     if args.dashboard_password:

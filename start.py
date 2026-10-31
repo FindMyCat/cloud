@@ -45,6 +45,7 @@ QUESTIONS = [
     ("Public domain for the app's API", "FMC_DOMAIN", None, False),
     ("Hologram API key", "HOLOGRAM_API_KEY", None, True),
     ("Hologram org id", "HOLOGRAM_ORG_ID", None, False),
+    ("Google geolocation API key", "GOOGLE_GEOLOCATION_API_KEY", None, True),
 ]
 
 
@@ -80,7 +81,7 @@ def ask_questions():
     answers["FINDMYCAT_ENCRYPTION_KEY"] = (
         saved.get("FINDMYCAT_ENCRYPTION_KEY") or base64.b64encode(secrets.token_bytes(32)).decode()
     )
-    # EMQX and wifi-locator send it as x-api-key when posting collar status to FindMyCat-Web.
+    # EMQX sends it as x-api-key when posting collar status and WiFi scans to FindMyCat-Web.
     answers["FMC_INGEST_KEY"] = saved.get("FMC_INGEST_KEY") or secrets.token_hex(32)
 
     remember(answers)
