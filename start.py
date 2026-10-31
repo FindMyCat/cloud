@@ -35,7 +35,7 @@ TOPIC = re.compile(r"^/[^+#]+$")
 
 QUESTIONS = [
     ("Location topic", "FMC_LOCATION_TOPIC", "/secret-topic", False),
-    ("Status topic", "FMC_STATUS_TOPIC", "/status", False),
+    ("Device status topic", "FMC_STATUS_TOPIC", "/status", False),
     ("WiFi scan topic", "FMC_WIFI_SCAN_TOPIC", "/wifi-scan", False),
     ("Traccar email", "FMC_TRACCAR_EMAIL", None, False),
     ("Traccar password", "FMC_TRACCAR_PASSWORD", None, True),
