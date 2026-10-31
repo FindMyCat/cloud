@@ -1,6 +1,6 @@
 """Which collar a request from the app may act on, decided by Traccar.
 
-Shared by the services behind the API host (device-status, device-commands),
+Shared by the services behind the API host (device-status),
 which mount this file beside their own script.
 """
 

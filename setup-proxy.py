@@ -18,7 +18,6 @@ from utils import API_HEALTH_PATH, ROUTES_FILE, bad, default_host, dim, head, ok
 # stays private; FindMyCat-Web reaches it over the docker network.
 ROUTES = {
     "/api/device-status": "http://device-status.instance:8091",
-    "/api/device-commands": "http://device-commands.instance:8093",
 }
 WEB = "http://findmycat-web.instance:8080"
 

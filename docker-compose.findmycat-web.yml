@@ -19,6 +19,7 @@ services:
     volumes:
       - "/var/docker/findmycat-web/data:/data:rw"
       - "/var/docker/findmycat-web/keys:/root/.aspnet/DataProtection-Keys:rw"
+      - "./firmware:/firmware:ro"
     networks:
       emqx-bridge:
         aliases:

@@ -30,7 +30,6 @@ COMPOSE_FILES = [
     "docker-compose.wifi-locator.yml",
     "docker-compose.postgres.yml",
     "docker-compose.device-status.yml",
-    "docker-compose.device-commands.yml",
     "docker-compose.findmycat-web.yml",
 ]
 # A FindMyCat-Web endpoint that answers without a login, so a 200 shows the
