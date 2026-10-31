@@ -3,6 +3,7 @@
 
     ./findmycat.py start [--emqx-password ...]   # everything; the only one you need
     ./findmycat.py status
+    ./findmycat.py logs web [-f]
     ./findmycat.py verify --location-topic ... --device-id ...
     ./findmycat.py destroy [--yes]
     ./findmycat.py hologram-ping send --device-id ... [--at 300,900,1800]
@@ -56,6 +57,7 @@ COMMANDS = {
     "setup-proxy": ("setup-proxy.py",
                     "Publish the API on a domain through Traefik."),
     "status": ("status.py", "Quick health check of every service."),
+    "logs": ("logs.py", "Show a container's logs, e.g. logs web -f."),
     "verify": ("verify.py", "Publish a test position and check the pipeline."),
     "hologram-ping": ("hologram-ping.py",
                       "Send a command to a collar using the Hologram API."),
