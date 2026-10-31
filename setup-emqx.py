@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Point the EMQX rule engine at Traccar, wifi-locator and device-status.
+"""Point the EMQX rule engine at Traccar, wifi-locator and FindMyCat Central Service
 
     ./setup-emqx.py --location-topic '/your-topic'
     ./setup-emqx.py --location-topic '/your-topic' --dashboard-password 'something-long'

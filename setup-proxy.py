@@ -13,12 +13,6 @@ import sys
 
 from utils import API_HEALTH_PATH, ROUTES_FILE, bad, default_host, dim, head, ok, request, value, wait_for
 
-# Path prefix on the domain, and the container that serves it. FindMyCat-Web
-# takes everything not listed: the web app, its API and live updates. Traccar
-# stays private; FindMyCat-Web reaches it over the docker network.
-ROUTES = {
-    "/api/device-status": "http://device-status.instance:8091",
-}
 WEB = "http://findmycat-web.instance:8080"
 
 
@@ -51,11 +45,6 @@ def traefik_config(domain):
 
     routers = {"web": router(host, "web")}
     services = {"web": service(WEB)}
-
-    for path, url in ROUTES.items():
-        name = path.rsplit("/", 1)[-1]
-        routers[name] = router(f"{host} && PathPrefix(`{path}`)", name)
-        services[name] = service(url)
 
     # Plain HTTP on port 80 only redirects to HTTPS.
     routers["redirect"] = {
@@ -90,8 +79,6 @@ def main():
     print(f"  {'routes':<9} {ok('written')} {dim(ROUTES_FILE)}")
 
     print(f"  {'/':<9} {value(WEB)}")
-    for path, url in ROUTES.items():
-        print(f"  {path:<9} {value(url)}")
 
     # The certificate is issued on the first request, which can take a minute.
     if not wait_for("https", f"https://{args.domain}{API_HEALTH_PATH}", seconds=180):
