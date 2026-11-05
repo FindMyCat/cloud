@@ -12,8 +12,13 @@ import argparse
 import os
 import sys
 import urllib.error
+from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
 
 from utils import TRACCAR, bad, dim, head, ok, read_env, remember, request, value, wait_for
+
+# Rotate by re-running setup before it runs out; the expired token is replaced then.
+TOKEN_LIFETIME_DAYS = 365
 
 
 def is_new_server():
@@ -75,16 +80,30 @@ def ensure_device(email, password, device_id, name, emoji):
     print(f"  {'device':<9} {value(device_id)} {ok('registered')} {value(emoji)}")
 
 
+def is_token_accepted(token):
+    try:
+        request(f"{TRACCAR}/api/devices", token=token)
+        return True
+    except urllib.error.HTTPError:
+        return False
+
+
 def ensure_api_token(email, password):
-    """FindMyCat-Web reads Traccar with this token. Made once and kept in .env;
-    with no expiration given, Traccar issues one that does not expire."""
-    if read_env().get("FMC_TRACCAR_TOKEN"):
-        print(f"  {'token':<9} {dim('already in .env')}")
+    """FindMyCat-Web reads Traccar with this token, kept in .env. Traccar gives a
+    token without an explicit expiration only 7 days, so one is always passed;
+    an expired or rejected token is replaced on the next run."""
+    existing = read_env().get("FMC_TRACCAR_TOKEN")
+    if existing and is_token_accepted(existing):
+        print(f"  {'token':<9} {dim('already in .env, still accepted')}")
         return
-    token = request(f"{TRACCAR}/api/session/token", method="POST", form=True, body="",
+
+    expiration = datetime.now(timezone.utc) + timedelta(days=TOKEN_LIFETIME_DAYS)
+    token = request(f"{TRACCAR}/api/session/token", method="POST", form=True,
+                    body=urlencode({"expiration": expiration.strftime("%Y-%m-%dT%H:%M:%SZ")}),
                     auth=(email, password))
     remember({"FMC_TRACCAR_TOKEN": token.strip()})
-    print(f"  {'token':<9} {ok('created')} {dim('saved to .env')}")
+    action = "replaced" if existing else "created"
+    print(f"  {'token':<9} {ok(action)} {dim(f'valid until {expiration:%Y-%m-%d}, saved to .env')}")
 
 
 def main():
