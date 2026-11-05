@@ -46,17 +46,17 @@ def emqx_add_rule(sql, description, template, resource, auth, topic,
     print(f"  {'rule':<9} {ok(rule)} {dim('on ' + topic)}")
 
 
-def emqx_wifi_scan_rule(wifi_scan_topic, wifi_scan_url, ingest_key, auth):
-    """Over LTE the collar publishes its raw WiFi scan; FindMyCat-Web resolves it."""
+def emqx_scan_rule(scan_name, scan_topic, scan_url, ingest_key, auth):
+    """Over LTE the collar publishes a raw WiFi or cell scan; FindMyCat-Web resolves it."""
     resource = request(
         f"{EMQX}/resources",
         method="POST",
         auth=auth,
         body={
             "type": "web_hook",
-            "description": f"{TAG} wifi-scan",
+            "description": f"{TAG} {scan_name}",
             "config": {
-                "url": wifi_scan_url,
+                "url": scan_url,
                 "method": "POST",
                 "headers": {"content-type": "application/json", "x-api-key": ingest_key},
                 "connect_timeout": "5s",
@@ -65,15 +65,15 @@ def emqx_wifi_scan_rule(wifi_scan_topic, wifi_scan_url, ingest_key, auth):
             },
         },
     )["data"]["id"]
-    print(f"  {'resource':<9} {ok(resource)} {dim('-> ' + wifi_scan_url)}")
+    print(f"  {'resource':<9} {ok(resource)} {dim('-> ' + scan_url)}")
 
     emqx_add_rule(
-        f'SELECT payload as scan, clientid FROM "{wifi_scan_topic}"',
-        f"{TAG}: WiFi scan -> FindMyCat-Web",
+        f'SELECT payload as scan, clientid FROM "{scan_topic}"',
+        f"{TAG}: {scan_name} -> FindMyCat-Web",
         '{"id": "${clientid}", "scan": "${scan}"}',
         resource,
         auth,
-        wifi_scan_topic,
+        scan_topic,
         content_type="application/json",
     )
 
@@ -180,10 +180,14 @@ def main():
                         help="MQTT topic the collar publishes status reports to")
     parser.add_argument("--wifi-scan-topic", default="/wifi-scan",
                         help="MQTT topic the collar publishes raw WiFi scans to over LTE")
+    parser.add_argument("--cell-scan-topic", default="/cell-scan",
+                        help="MQTT topic the collar publishes raw LTE cell scans to")
     parser.add_argument("--traccar-url", default="http://traccar.instance:5055",
                         help="where the rule engine POSTs positions")
     parser.add_argument("--wifi-scan-url", default="http://findmycat-web.instance:8080/api/ingest/wifi-scan",
                         help="where the rule engine POSTs WiFi scans to be resolved")
+    parser.add_argument("--cell-scan-url", default="http://findmycat-web.instance:8080/api/ingest/cell-scan",
+                        help="where the rule engine POSTs cell scans to be resolved")
     parser.add_argument("--device-status-url", default="http://findmycat-web.instance:8080/api/ingest/status",
                         help="where the rule engine POSTs status reports to be stored")
     parser.add_argument("--dashboard-password",
@@ -206,7 +210,8 @@ def main():
         sys.exit("set FMC_INGEST_KEY")
 
     emqx_rules(args.location_topic, args.traccar_url, auth)
-    emqx_wifi_scan_rule(args.wifi_scan_topic, args.wifi_scan_url, ingest_key, auth)
+    emqx_scan_rule("WiFi scan", args.wifi_scan_topic, args.wifi_scan_url, ingest_key, auth)
+    emqx_scan_rule("cell scan", args.cell_scan_topic, args.cell_scan_url, ingest_key, auth)
     emqx_device_status_rule(args.status_topic, args.device_status_url, ingest_key, auth)
 
     if args.dashboard_password:

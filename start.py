@@ -37,6 +37,7 @@ QUESTIONS = [
     ("Location topic", "FMC_LOCATION_TOPIC", "/secret-topic", False),
     ("Device status topic", "FMC_STATUS_TOPIC", "/status", False),
     ("WiFi scan topic", "FMC_WIFI_SCAN_TOPIC", "/wifi-scan", False),
+    ("Cell scan topic", "FMC_CELL_SCAN_TOPIC", "/cell-scan", False),
     ("Traccar email", "FMC_TRACCAR_EMAIL", None, False),
     ("Traccar password", "FMC_TRACCAR_PASSWORD", None, True),
     ("Device id (the collar's MQTT client id)", "FMC_DEVICE_ID", None, False),
@@ -93,7 +94,7 @@ def set_up(env, emqx_password):
     traccar = ["--email", env["FMC_TRACCAR_EMAIL"], "--device-id", env["FMC_DEVICE_ID"],
                "--device-name", env["FMC_DEVICE_NAME"], "--device-emoji", env["FMC_DEVICE_EMOJI"]]
     emqx = ["--location-topic", env["FMC_LOCATION_TOPIC"], "--status-topic", env["FMC_STATUS_TOPIC"],
-            "--wifi-scan-topic", env["FMC_WIFI_SCAN_TOPIC"]]
+            "--wifi-scan-topic", env["FMC_WIFI_SCAN_TOPIC"], "--cell-scan-topic", env["FMC_CELL_SCAN_TOPIC"]]
     if emqx_password:
         emqx += ["--dashboard-password", emqx_password]
 
