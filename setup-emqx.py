@@ -46,17 +46,20 @@ def emqx_add_rule(sql, description, template, resource, auth, topic,
     print(f"  {'rule':<9} {ok(rule)} {dim('on ' + topic)}")
 
 
-def emqx_scan_rule(scan_name, scan_topic, scan_url, ingest_key, auth):
-    """Over LTE the collar publishes a raw WiFi or cell scan; FindMyCat-Web resolves it."""
+def emqx_ingest_rule(name, topic, ingest_url, ingest_key, auth,
+                     selected_payload="payload", body_field="scan"):
+    """Forwards one collar topic to a FindMyCat-Web ingest endpoint as
+    {"id": <clientid>, <body_field>: <selected_payload>}. Used for raw WiFi and
+    cell scans, and for GNSS fixes so the server can log the ping as answered."""
     resource = request(
         f"{EMQX}/resources",
         method="POST",
         auth=auth,
         body={
             "type": "web_hook",
-            "description": f"{TAG} {scan_name}",
+            "description": f"{TAG} {name}",
             "config": {
-                "url": scan_url,
+                "url": ingest_url,
                 "method": "POST",
                 "headers": {"content-type": "application/json", "x-api-key": ingest_key},
                 "connect_timeout": "5s",
@@ -65,15 +68,15 @@ def emqx_scan_rule(scan_name, scan_topic, scan_url, ingest_key, auth):
             },
         },
     )["data"]["id"]
-    print(f"  {'resource':<9} {ok(resource)} {dim('-> ' + scan_url)}")
+    print(f"  {'resource':<9} {ok(resource)} {dim('-> ' + ingest_url)}")
 
     emqx_add_rule(
-        f'SELECT payload as scan, clientid FROM "{scan_topic}"',
-        f"{TAG}: {scan_name} -> FindMyCat-Web",
-        '{"id": "${clientid}", "scan": "${scan}"}',
+        f'SELECT {selected_payload} as forwarded, clientid FROM "{topic}"',
+        f"{TAG}: {name} -> FindMyCat-Web",
+        '{"id": "${clientid}", "' + body_field + '": "${forwarded}"}',
         resource,
         auth,
-        scan_topic,
+        topic,
         content_type="application/json",
     )
 
@@ -112,7 +115,7 @@ def emqx_rules(location_topic, traccar_url, auth):
     # Traccar's OsmAnd protocol reads these as form fields on the POST body.
     template = (
         "id=${clientid}&lat=${latitude}&lon=${longitude}"
-        "&accuracy=${accuracy}&batt=${batt_lvl}"
+        "&accuracy=${accuracy}&batt=${batt_lvl}&sat=${satellites}"
     )
 
     emqx_add_rule(
@@ -186,6 +189,8 @@ def main():
                         help="where the rule engine POSTs positions")
     parser.add_argument("--wifi-scan-url", default="http://findmycat-web.instance:8080/api/ingest/wifi-scan",
                         help="where the rule engine POSTs WiFi scans to be resolved")
+    parser.add_argument("--gnss-fix-url", default="http://findmycat-web.instance:8080/api/ingest/gnss-fix",
+                        help="where the rule engine POSTs GNSS fixes so the ping is logged as answered")
     parser.add_argument("--cell-scan-url", default="http://findmycat-web.instance:8080/api/ingest/cell-scan",
                         help="where the rule engine POSTs cell scans to be resolved")
     parser.add_argument("--device-status-url", default="http://findmycat-web.instance:8080/api/ingest/status",
@@ -210,8 +215,10 @@ def main():
         sys.exit("set FMC_INGEST_KEY")
 
     emqx_rules(args.location_topic, args.traccar_url, auth)
-    emqx_scan_rule("WiFi scan", args.wifi_scan_topic, args.wifi_scan_url, ingest_key, auth)
-    emqx_scan_rule("cell scan", args.cell_scan_topic, args.cell_scan_url, ingest_key, auth)
+    emqx_ingest_rule("WiFi scan", args.wifi_scan_topic, args.wifi_scan_url, ingest_key, auth)
+    emqx_ingest_rule("cell scan", args.cell_scan_topic, args.cell_scan_url, ingest_key, auth)
+    emqx_ingest_rule("GNSS fix", args.location_topic, args.gnss_fix_url, ingest_key, auth,
+                     selected_payload="payload.msg", body_field="fix")
     emqx_device_status_rule(args.status_topic, args.device_status_url, ingest_key, auth)
 
     if args.dashboard_password:
