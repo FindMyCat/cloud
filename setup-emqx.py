@@ -81,7 +81,9 @@ def emqx_ingest_rule(name, topic, ingest_url, ingest_key, auth,
     )
 
 
-def emqx_rules(location_topic, traccar_url, auth):
+def emqx_rules(location_topics, traccar_url, auth):
+    """Every position topic goes to Traccar: the collar's own (LTE GNSS fixes)
+    and the home station's (home presence and positions relayed from LoRa)."""
     emqx_cleanup("rules", auth)
     emqx_cleanup("resources", auth)
 
@@ -104,28 +106,29 @@ def emqx_rules(location_topic, traccar_url, auth):
     )["data"]["id"]
     print(f"  {'resource':<9} {ok(resource)} {dim('-> ' + traccar_url)}")
 
-    sql = (
-        "SELECT nth(1, split(payload.msg, ',')) as latitude, "
-        "nth(2, split(payload.msg, ',')) as longitude, "
-        "nth(3, split(payload.msg, ',')) as satellites, "
-        "nth(4, split(payload.msg, ',')) as accuracy, "
-        "nth(5, split(payload.msg, ',')) as batt_lvl, "
-        f'clientid FROM "{location_topic}"'
-    )
     # Traccar's OsmAnd protocol reads these as form fields on the POST body.
     template = (
         "id=${clientid}&lat=${latitude}&lon=${longitude}"
         "&accuracy=${accuracy}&batt=${batt_lvl}&sat=${satellites}"
     )
 
-    emqx_add_rule(
-        sql,
-        f"{TAG}: MQTT-SN position -> Traccar",
-        template,
-        resource,
-        auth,
-        location_topic,
-    )
+    for location_topic in location_topics:
+        sql = (
+            "SELECT nth(1, split(payload.msg, ',')) as latitude, "
+            "nth(2, split(payload.msg, ',')) as longitude, "
+            "nth(3, split(payload.msg, ',')) as satellites, "
+            "nth(4, split(payload.msg, ',')) as accuracy, "
+            "nth(5, split(payload.msg, ',')) as batt_lvl, "
+            f'clientid FROM "{location_topic}"'
+        )
+        emqx_add_rule(
+            sql,
+            f"{TAG}: position -> Traccar",
+            template,
+            resource,
+            auth,
+            location_topic,
+        )
 
 
 def emqx_device_status_rule(status_topic, device_status_url, ingest_key, auth):
@@ -179,6 +182,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--location-topic", required=True,
                         help="MQTT topic the collar publishes positions to")
+    parser.add_argument("--homestation-topic", default="/homestation-location",
+                        help="MQTT topic the home station publishes positions to; kept apart "
+                             "so its positions are not logged as the collar's GNSS ping answers")
     parser.add_argument("--status-topic", default="/status",
                         help="MQTT topic the collar publishes status reports to")
     parser.add_argument("--wifi-scan-topic", default="/wifi-scan",
@@ -214,7 +220,7 @@ def main():
     if not ingest_key:
         sys.exit("set FMC_INGEST_KEY")
 
-    emqx_rules(args.location_topic, args.traccar_url, auth)
+    emqx_rules([args.location_topic, args.homestation_topic], args.traccar_url, auth)
     emqx_ingest_rule("WiFi scan", args.wifi_scan_topic, args.wifi_scan_url, ingest_key, auth)
     emqx_ingest_rule("cell scan", args.cell_scan_topic, args.cell_scan_url, ingest_key, auth)
     emqx_ingest_rule("GNSS fix", args.location_topic, args.gnss_fix_url, ingest_key, auth,

@@ -35,6 +35,7 @@ TOPIC = re.compile(r"^/[^+#]+$")
 
 QUESTIONS = [
     ("Location topic", "FMC_LOCATION_TOPIC", "/secret-topic", False),
+    ("Home station location topic", "FMC_HOMESTATION_TOPIC", "/homestation-location", False),
     ("Device status topic", "FMC_STATUS_TOPIC", "/status", False),
     ("WiFi scan topic", "FMC_WIFI_SCAN_TOPIC", "/wifi-scan", False),
     ("Cell scan topic", "FMC_CELL_SCAN_TOPIC", "/cell-scan", False),
@@ -93,7 +94,8 @@ def set_up(env, emqx_password):
     """Runs each setup script in order, stopping at the first that fails."""
     traccar = ["--email", env["FMC_TRACCAR_EMAIL"], "--device-id", env["FMC_DEVICE_ID"],
                "--device-name", env["FMC_DEVICE_NAME"], "--device-emoji", env["FMC_DEVICE_EMOJI"]]
-    emqx = ["--location-topic", env["FMC_LOCATION_TOPIC"], "--status-topic", env["FMC_STATUS_TOPIC"],
+    emqx = ["--location-topic", env["FMC_LOCATION_TOPIC"], "--homestation-topic", env["FMC_HOMESTATION_TOPIC"],
+            "--status-topic", env["FMC_STATUS_TOPIC"],
             "--wifi-scan-topic", env["FMC_WIFI_SCAN_TOPIC"], "--cell-scan-topic", env["FMC_CELL_SCAN_TOPIC"]]
     if emqx_password:
         emqx += ["--dashboard-password", emqx_password]
