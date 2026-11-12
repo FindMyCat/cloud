@@ -104,18 +104,16 @@ def set_up(env, emqx_password):
     if not run_script("setup-traccar.py", *traccar,
                       env={**os.environ, "FMC_TRACCAR_PASSWORD": env["FMC_TRACCAR_PASSWORD"]}):
         return False
+    if not os.path.exists(BROKER_CERT):
+        print()
+        if not run_script("setup-mqtt-tls.py", "--domain", env["FMC_DOMAIN"]):
+            return False
     # Picks up the Traccar token setup-traccar.py may have just written to .env;
     # does nothing when it was already there.
     compose(["docker-compose.findmycat-web.yml"], "up", "-d", quiet=True)
     print()
     if not run_script("setup-emqx.py", *emqx, env={**os.environ, "FMC_INGEST_KEY": env["FMC_INGEST_KEY"]}):
         return False
-    # Only the first time: devices pin this certificate, so replacing it is a
-    # deliberate ./findmycat.py setup-mqtt-tls --force.
-    if not os.path.exists(BROKER_CERT):
-        print()
-        if not run_script("setup-mqtt-tls.py", "--domain", env["FMC_DOMAIN"]):
-            return False
     print()
     return run_script("setup-proxy.py", "--domain", env["FMC_DOMAIN"])
 

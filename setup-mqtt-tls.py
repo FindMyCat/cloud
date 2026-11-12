@@ -57,14 +57,6 @@ def describe():
         print(f"    {dim(line.strip())}")
 
 
-def as_c_string():
-    """The certificate as a C string literal, for ca_certificate.h."""
-    with open(CERT_FILE) as handle:
-        lines = handle.read().strip().splitlines()
-
-    return "\n".join(f'\t"{line}\\n"' for line in lines) + ";"
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--domain", required=True,
@@ -97,14 +89,8 @@ def main():
         print(f"\n  {dim('restarting emqx to pick up the listener')}")
         compose(["docker-compose.emqx.yml"], "up", "-d")
 
-    print(f"\n{head('firmware')}")
-    print(f"  Paste into {value('embedded-software/packages/homestation-esp32/'
-                               'app/src/modules/mqtt/ca_certificate.h')}:")
-    print()
-    print("static const unsigned char ca_certificate[] =")
-    print(as_c_string())
-    print()
-    print(f"  {dim('then confirm the listener answers:')}")
+    print(f"\n  {dim('the app hands this certificate to devices when it provisions them')}")
+    print(f"  {dim('confirm the listener answers:')}")
     print(f"  {dim(f'openssl s_client -connect {args.domain}:8883 </dev/null')}")
 
 

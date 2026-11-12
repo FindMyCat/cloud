@@ -13,6 +13,9 @@ services:
       - "Hologram__OrgId=${HOLOGRAM_ORG_ID:-}"
       - "Ingest__ApiKey=${FMC_INGEST_KEY:-}"
       - "Google__GeolocationApiKey=${GOOGLE_GEOLOCATION_API_KEY:-}"
+      - "Provisioning__BrokerHost=${FMC_DOMAIN:-}"
+      - "Provisioning__HomeStationTopic=${FMC_HOMESTATION_TOPIC:-}"
+      - "Provisioning__WifiScanTopic=${FMC_WIFI_SCAN_TOPIC:-}"
       - "ConnectionStrings__Default=Data Source=/data/findmycat.db"
       - "FINDMYCAT_ENCRYPTION_KEY=${FINDMYCAT_ENCRYPTION_KEY:?set FINDMYCAT_ENCRYPTION_KEY in .env (openssl rand -base64 32)}"
       - "Authentication__Google__Enabled=false"
@@ -21,6 +24,7 @@ services:
       - "/var/docker/findmycat-web/data:/data:rw"
       - "/var/docker/findmycat-web/keys:/root/.aspnet/DataProtection-Keys:rw"
       - "./firmware:/firmware:ro"
+      - "./emqx_certs/broker-cert.pem:/broker-ca/broker-cert.pem:ro"
     networks:
       emqx-bridge:
         aliases:
